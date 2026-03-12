@@ -253,26 +253,17 @@ if lookup_btn and issue_url:
                         st.markdown("**GitHub link:**")
                         st.markdown(f"[View repo at this commit](https://github.com/{owner}/{repo}/tree/{base_sha})")
                     
-                    # Show the commit details if we can fetch them
                     with st.expander("View commit details"):
-                        commit_url = f"https://api.github.com/repos/{owner}/{repo}/commits/{base_sha}"
-                        import requests
-                        try:
-                            resp = requests.get(commit_url, headers=api._headers())
-                        except Exception as e:
-                            st.caption(f"Could not fetch commit details: {e}")
+                        commit_data = api._rest_get(f"/repos/{owner}/{repo}/commits/{base_sha}")
+                        if commit_data:
+                            commit_msg = commit_data.get("commit", {}).get("message", "N/A")
+                            commit_author = commit_data.get("commit", {}).get("author", {}).get("name", "Unknown")
+                            commit_date = commit_data.get("commit", {}).get("author", {}).get("date", "Unknown")
+                            st.markdown(f"**Commit message:** {commit_msg[:200]}{'...' if len(commit_msg) > 200 else ''}")
+                            st.markdown(f"**Author:** {commit_author}")
+                            st.markdown(f"**Date:** {commit_date}")
                         else:
-                            if resp.status_code == 200:
-                                commit_data = resp.json()
-                                commit_msg = commit_data.get("commit", {}).get("message", "N/A")
-                                commit_author = commit_data.get("commit", {}).get("author", {}).get("name", "Unknown")
-                                commit_date = commit_data.get("commit", {}).get("author", {}).get("date", "Unknown")
-                                
-                                st.markdown(f"**Commit message:** {commit_msg[:200]}{'...' if len(commit_msg) > 200 else ''}")
-                                st.markdown(f"**Author:** {commit_author}")
-                                st.markdown(f"**Date:** {commit_date}")
-                            else:
-                                st.caption("Could not fetch commit details")
+                            st.caption("Could not fetch commit details")
                 else:
                     st.warning(f"""
 **Could not determine base SHA.**
