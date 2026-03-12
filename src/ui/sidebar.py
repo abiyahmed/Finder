@@ -257,6 +257,7 @@ def render_sidebar():
         st.page_link("pages/6_Model_Evaluation.py", label="Model Evaluation", icon=":material/analytics:")
         st.page_link("pages/15_Labeling.py", label="Labeling", icon=":material/label:")
         st.page_link("pages/16_Task_Key_Request.py", label="Task Key Request", icon=":material/vpn_key:")
+        st.page_link("pages/17_Task_Submission.py", label="Task Submission", icon=":material/upload_file:")
 
         st.markdown("---")
         st.markdown("### Utilities")

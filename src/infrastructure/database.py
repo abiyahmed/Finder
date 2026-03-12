@@ -441,6 +441,28 @@ class TaskKeyRequest(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class TaskSubmission(Base):
+    """User submits a completed task with tar file, issue link, and description.
+    Approver responds with a tar file, commit SHA, issue link, and repo link."""
+    __tablename__ = "task_submissions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    task_id = Column(Integer, ForeignKey("tasks.id"), nullable=True)
+    issue_url = Column(Text, nullable=False)
+    issue_description = Column(Text, nullable=False)
+    tar_file_path = Column(Text, nullable=False)
+    status = Column(String(20), default="pending")  # pending, approved, rejected
+    approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    approved_at = Column(DateTime, nullable=True)
+    rejection_reason = Column(Text, nullable=True)
+    response_tar_file_path = Column(Text, nullable=True)
+    response_commit_sha = Column(Text, nullable=True)
+    response_issue_link = Column(Text, nullable=True)
+    response_repo_link = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
 # =========================
 # Database Initialization
 # =========================
@@ -539,6 +561,13 @@ def _migrate_db():
 
     _add_columns_if_missing(inspector, "task_key_requests", [
         ("response_key", "TEXT"),
+    ])
+
+    _add_columns_if_missing(inspector, "task_submissions", [
+        ("response_tar_file_path", "TEXT"),
+        ("response_commit_sha", "TEXT"),
+        ("response_issue_link", "TEXT"),
+        ("response_repo_link", "TEXT"),
     ])
 
     _add_columns_if_missing(inspector, "labeling_submissions", [
@@ -3699,5 +3728,130 @@ def get_all_task_key_requests() -> list[TaskKeyRequest]:
     session = get_session()
     try:
         return session.query(TaskKeyRequest).order_by(TaskKeyRequest.created_at.desc()).all()
+    finally:
+        session.close()
+
+
+# =========================
+# Task Submission CRUD
+# =========================
+
+def create_task_submission(
+    user_id: int,
+    issue_url: str,
+    issue_description: str,
+    tar_file_path: str,
+    task_id: int = None,
+    access_context: Optional[dict] = None,
+) -> TaskSubmission:
+    session = get_session()
+    try:
+        sub = TaskSubmission(
+            user_id=user_id,
+            task_id=task_id,
+            issue_url=issue_url,
+            issue_description=issue_description,
+            tar_file_path=tar_file_path,
+            status="pending",
+        )
+        session.add(sub)
+        session.flush()
+
+        _record_user_activity_in_session(
+            session=session,
+            user_id=user_id,
+            action="task_submitted",
+            feature="Task Submission",
+            metadata={"issue_url": issue_url, "task_id": task_id},
+            access_context=access_context,
+        )
+
+        session.commit()
+        session.refresh(sub)
+        return sub
+    finally:
+        session.close()
+
+
+def get_task_submissions_by_user(user_id: int) -> list[TaskSubmission]:
+    session = get_session()
+    try:
+        return session.query(TaskSubmission).filter_by(user_id=user_id).order_by(TaskSubmission.created_at.desc()).all()
+    finally:
+        session.close()
+
+
+def get_pending_task_submissions() -> list[TaskSubmission]:
+    session = get_session()
+    try:
+        return session.query(TaskSubmission).filter_by(status="pending").order_by(TaskSubmission.created_at.asc()).all()
+    finally:
+        session.close()
+
+
+def approve_task_submission(
+    submission_id: int,
+    approver_user_id: int,
+    response_tar_file_path: str = None,
+    response_commit_sha: str = None,
+    response_issue_link: str = None,
+    response_repo_link: str = None,
+    access_context: Optional[dict] = None,
+) -> Optional[TaskSubmission]:
+    session = get_session()
+    try:
+        sub = session.query(TaskSubmission).filter_by(id=submission_id).first()
+        if sub:
+            sub.status = "approved"
+            sub.approved_by = approver_user_id
+            sub.approved_at = datetime.utcnow()
+            sub.response_tar_file_path = response_tar_file_path
+            sub.response_commit_sha = response_commit_sha
+            sub.response_issue_link = response_issue_link
+            sub.response_repo_link = response_repo_link
+
+            _record_user_activity_in_session(
+                session=session,
+                user_id=approver_user_id,
+                action="task_submission_approved",
+                feature="Task Submission",
+                metadata={"submission_id": submission_id, "commit_sha": response_commit_sha},
+                access_context=access_context,
+            )
+
+            session.commit()
+            session.refresh(sub)
+        return sub
+    finally:
+        session.close()
+
+
+def reject_task_submission(
+    submission_id: int,
+    approver_user_id: int,
+    reason: str = None,
+    access_context: Optional[dict] = None,
+) -> Optional[TaskSubmission]:
+    session = get_session()
+    try:
+        sub = session.query(TaskSubmission).filter_by(id=submission_id).first()
+        if sub:
+            sub.status = "rejected"
+            sub.approved_by = approver_user_id
+            sub.approved_at = datetime.utcnow()
+            sub.rejection_reason = reason
+
+            _record_user_activity_in_session(
+                session=session,
+                user_id=approver_user_id,
+                action="task_submission_rejected",
+                feature="Task Submission",
+                metadata={"submission_id": submission_id, "reason": reason},
+                access_context=access_context,
+            )
+
+            session.commit()
+            session.refresh(sub)
+        return sub
     finally:
         session.close()
