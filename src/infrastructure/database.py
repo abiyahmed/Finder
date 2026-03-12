@@ -19,7 +19,8 @@ from sqlalchemy import (
     JSON,
     UniqueConstraint,
 )
-from sqlalchemy.orm import declarative_base, sessionmaker, relationship
+from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import declarative_base, sessionmaker, relationship, joinedload
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -49,7 +50,11 @@ _connect_args = {"check_same_thread": False} if "sqlite" in DATABASE_URL else {}
 def _create_engine_with_fallback():
     """Create engine, falling back to SQLite if Supabase Postgres is unreachable."""
     try:
-        eng = create_engine(DATABASE_URL, echo=False, connect_args=_connect_args, pool_pre_ping=True)
+        kwargs = {"echo": False, "connect_args": _connect_args, "pool_pre_ping": True}
+        if "postgresql" in DATABASE_URL:
+            # Recycle connections before server idle timeout (e.g. Supabase ~5–10 min)
+            kwargs["pool_recycle"] = 300
+        eng = create_engine(DATABASE_URL, **kwargs)
         if "postgresql" in DATABASE_URL:
             with eng.connect() as conn:
                 conn.execute(__import__("sqlalchemy").text("SELECT 1"))
@@ -60,7 +65,12 @@ def _create_engine_with_fallback():
         import warnings
         warnings.warn(f"Supabase Postgres unreachable ({exc}), falling back to local SQLite.")
         fallback_url = "sqlite:///tasks.db"
-        return create_engine(fallback_url, echo=False, connect_args={"check_same_thread": False})
+        return create_engine(
+            fallback_url,
+            echo=False,
+            connect_args={"check_same_thread": False},
+            pool_pre_ping=True,
+        )
 
 engine = _create_engine_with_fallback()
 SessionLocal = sessionmaker(bind=engine)
@@ -460,6 +470,27 @@ class TaskSubmission(Base):
     response_commit_sha = Column(Text, nullable=True)
     response_issue_link = Column(Text, nullable=True)
     response_repo_link = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class FinalSubmission(Base):
+    """Final task submission: tar file, Anthropic ID, app version, base SHA, repo/issue links, Dockerfile."""
+    __tablename__ = "final_submissions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    task_id = Column(Integer, ForeignKey("tasks.id"), nullable=True)
+    tar_file_path = Column(Text, nullable=False)
+    anthropic_id = Column(String(255), nullable=False)
+    app_version = Column(String(100), nullable=False)
+    base_sha = Column(Text, nullable=False)
+    repo_link = Column(Text, nullable=False)
+    issue_link = Column(Text, nullable=False)
+    dockerfile = Column(Text, nullable=True)
+    status = Column(String(20), default="pending")
+    approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    approved_at = Column(DateTime, nullable=True)
+    rejection_reason = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
@@ -1612,10 +1643,15 @@ def get_task_by_id(task_id: int) -> Optional[Task]:
 
 
 def get_all_tasks() -> list[Task]:
-    """Get all tasks."""
+    """Get all tasks (eager-load issue so issue_url is available after session close)."""
     session = get_session()
     try:
-        return session.query(Task).order_by(Task.created_at.desc()).all()
+        return (
+            session.query(Task)
+            .options(joinedload(Task.issue))
+            .order_by(Task.created_at.desc())
+            .all()
+        )
     finally:
         session.close()
 
@@ -2852,12 +2888,18 @@ def authenticate_user(
 
 
 def get_user_by_id(user_id: int) -> Optional[User]:
-    """Get user by ID."""
-    session = get_session()
-    try:
-        return session.query(User).filter_by(id=user_id).first()
-    finally:
-        session.close()
+    """Get user by ID. Retries once on transient connection errors (e.g. server closed)."""
+    for attempt in range(2):
+        session = get_session()
+        try:
+            return session.query(User).filter_by(id=user_id).first()
+        except OperationalError:
+            if attempt == 0:
+                continue
+            raise
+        finally:
+            session.close()
+    return None
 
 
 def get_user_by_username(username: str) -> Optional[User]:
@@ -3247,7 +3289,7 @@ def get_user_reserved_issues(user_id: int) -> list[GoodIssue]:
 # =========================
 
 def set_user_role(user_id: int, role: str) -> Optional[User]:
-    """Set a user's role (user, admin, role_manager)."""
+    """Set a user's role (user, admin, role_manager). role_manager = manager (can approve keys/submissions)."""
     session = get_session()
     try:
         user = session.query(User).filter_by(id=user_id).first()
@@ -3255,6 +3297,8 @@ def set_user_role(user_id: int, role: str) -> Optional[User]:
             user.role = role
             if role == "admin":
                 user.is_admin = 1
+            else:
+                user.is_admin = 0
             session.commit()
             session.refresh(user)
         return user
@@ -3274,7 +3318,7 @@ def get_role_managers() -> list[User]:
 
 
 def can_approve(user: User) -> bool:
-    """Check if a user can approve labeling submissions and task key requests."""
+    """Check if a user can approve task key requests, step 1 task submissions, and final submissions."""
     if not user:
         return False
     return user.username == "rebumex" or user.role in ("admin", "role_manager")
@@ -3850,6 +3894,125 @@ def reject_task_submission(
                 access_context=access_context,
             )
 
+            session.commit()
+            session.refresh(sub)
+        return sub
+    finally:
+        session.close()
+
+
+# =========================
+# Final Submission CRUD
+# =========================
+
+def create_final_submission(
+    user_id: int,
+    tar_file_path: str,
+    anthropic_id: str,
+    app_version: str,
+    base_sha: str,
+    repo_link: str,
+    issue_link: str,
+    dockerfile: str = None,
+    task_id: int = None,
+    access_context: Optional[dict] = None,
+) -> FinalSubmission:
+    session = get_session()
+    try:
+        sub = FinalSubmission(
+            user_id=user_id,
+            task_id=task_id,
+            tar_file_path=tar_file_path,
+            anthropic_id=anthropic_id,
+            app_version=app_version,
+            base_sha=base_sha,
+            repo_link=repo_link,
+            issue_link=issue_link,
+            dockerfile=dockerfile,
+            status="pending",
+        )
+        session.add(sub)
+        session.flush()
+        _record_user_activity_in_session(
+            session=session,
+            user_id=user_id,
+            action="final_submitted",
+            feature="Final Submission",
+            metadata={"issue_link": issue_link, "task_id": task_id},
+            access_context=access_context,
+        )
+        session.commit()
+        session.refresh(sub)
+        return sub
+    finally:
+        session.close()
+
+
+def get_final_submissions_by_user(user_id: int) -> list[FinalSubmission]:
+    session = get_session()
+    try:
+        return session.query(FinalSubmission).filter_by(user_id=user_id).order_by(FinalSubmission.created_at.desc()).all()
+    finally:
+        session.close()
+
+
+def get_pending_final_submissions() -> list[FinalSubmission]:
+    session = get_session()
+    try:
+        return session.query(FinalSubmission).filter_by(status="pending").order_by(FinalSubmission.created_at.asc()).all()
+    finally:
+        session.close()
+
+
+def approve_final_submission(
+    submission_id: int,
+    approver_user_id: int,
+    access_context: Optional[dict] = None,
+) -> Optional[FinalSubmission]:
+    session = get_session()
+    try:
+        sub = session.query(FinalSubmission).filter_by(id=submission_id).first()
+        if sub:
+            sub.status = "approved"
+            sub.approved_by = approver_user_id
+            sub.approved_at = datetime.utcnow()
+            _record_user_activity_in_session(
+                session=session,
+                user_id=approver_user_id,
+                action="final_submission_approved",
+                feature="Final Submission",
+                metadata={"submission_id": submission_id},
+                access_context=access_context,
+            )
+            session.commit()
+            session.refresh(sub)
+        return sub
+    finally:
+        session.close()
+
+
+def reject_final_submission(
+    submission_id: int,
+    approver_user_id: int,
+    reason: str = None,
+    access_context: Optional[dict] = None,
+) -> Optional[FinalSubmission]:
+    session = get_session()
+    try:
+        sub = session.query(FinalSubmission).filter_by(id=submission_id).first()
+        if sub:
+            sub.status = "rejected"
+            sub.approved_by = approver_user_id
+            sub.approved_at = datetime.utcnow()
+            sub.rejection_reason = reason
+            _record_user_activity_in_session(
+                session=session,
+                user_id=approver_user_id,
+                action="final_submission_rejected",
+                feature="Final Submission",
+                metadata={"submission_id": submission_id, "reason": reason},
+                access_context=access_context,
+            )
             session.commit()
             session.refresh(sub)
         return sub

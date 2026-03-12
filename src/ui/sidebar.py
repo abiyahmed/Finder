@@ -254,10 +254,9 @@ def render_sidebar():
         st.markdown("---")
         st.markdown("### Workflow")
         st.page_link("pages/3_Repo_Preparation.py", label="Repo Preparation", icon=":material/build:")
-        st.page_link("pages/6_Model_Evaluation.py", label="Model Evaluation", icon=":material/analytics:")
-        st.page_link("pages/15_Labeling.py", label="Labeling", icon=":material/label:")
         st.page_link("pages/16_Task_Key_Request.py", label="Task Key Request", icon=":material/vpn_key:")
-        st.page_link("pages/17_Task_Submission.py", label="Task Submission", icon=":material/upload_file:")
+        st.page_link("pages/17_Task_Submission.py", label="Step 1 Task Submission", icon=":material/upload_file:")
+        st.page_link("pages/18_Final_Submission.py", label="Final Submission", icon=":material/assignment_turned_in:")
 
         st.markdown("---")
         st.markdown("### Utilities")

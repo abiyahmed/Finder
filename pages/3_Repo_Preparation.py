@@ -30,7 +30,7 @@ current_user = require_auth("Repo Preparation")
 st.title("Repo Preparation")
 
 st.markdown("""
-**User Flow:** 1. Request Key → :orange[**2. Repo Preparation**] → 3. Model Evaluation → 4. Labeling → 5. Complete
+**User Flow:** 1. Request Key → :orange[**2. Repo Preparation**] → 3. Step 1 Task Submission → 4. Final Submission
 """)
 
 tasks = get_all_tasks()

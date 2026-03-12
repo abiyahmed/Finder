@@ -36,8 +36,8 @@ init_db()
 st.set_page_config(page_title="Data Management", page_icon=":material/storage:", layout="wide")
 quick_hide()
 render_sidebar()
-require_auth("Data Management")
-current_user_id = st.session_state.get("user_id")
+current_user = require_auth("Data Management")
+current_user_id = current_user.id if current_user else None
 
 st.title("Data Management")
 st.markdown("View, search, and manage all stored data.")
@@ -246,46 +246,78 @@ with tab_tasks:
         st.info("No tasks created")
 
 # =========================
-# DANGER ZONE
+# DANGER ZONE (Admin only)
 # =========================
 
 with tab_danger:
     st.subheader("Danger Zone")
-    st.warning("These actions cannot be undone.")
+    if not (current_user and getattr(current_user, "is_admin", 0)):
+        st.warning("Only **admins** can use Danger Zone actions. Managers and users can view and manage individual items in the tabs above.")
+        st.caption("Admins: use the Admin Panel to manage roles and access.")
+    else:
+        st.warning("These actions cannot be undone. Admin only.")
 
-    st.markdown("---")
-    col1, col2 = st.columns(2)
+        st.markdown("---")
+        col1, col2 = st.columns(2)
 
-    with col1:
-        st.markdown("**Clear Issues**")
-        st.caption(f"Delete all {len(issues)} stored issues")
-        if st.button("Clear All Issues", type="secondary"):
-            count = clear_all_issues()
-            st.success(f"Deleted {count} issues")
-            st.rerun()
+        with col1:
+            st.markdown("**Clear Issues**")
+            st.caption(f"Delete all {len(issues)} stored issues")
+            if st.button("Clear All Issues", type="secondary"):
+                count = clear_all_issues()
+                st.success(f"Deleted {count} issues")
+                st.rerun()
+
+            st.markdown("---")
+
+            st.markdown("**Clear Tasks**")
+            st.caption(f"Delete all {len(tasks)} tasks and iterations")
+            if st.button("Clear All Tasks", type="secondary"):
+                count = clear_all_tasks()
+                st.success(f"Deleted {count} tasks")
+                st.rerun()
+
+        with col2:
+            st.markdown("**Clear Repositories**")
+            st.caption(f"Delete all {len(repos)} repos and their issues")
+            if st.button("Clear All Repositories", type="secondary"):
+                count = clear_all_repositories()
+                st.success(f"Deleted {count} repositories")
+                st.rerun()
+
+            st.markdown("---")
+
+            st.markdown("**Clear Blacklist**")
+            st.caption(f"Delete all {len(blacklist)} blacklisted issues and {len(bl_repos)} repos")
+            if st.button("Clear All Blacklist", type="secondary"):
+                clear_blacklist()
+                for r in bl_repos:
+                    remove_repo_from_blacklist(
+                        r.full_name,
+                        actor_user_id=current_user_id,
+                        access_context=get_request_access_context(),
+                    )
+                st.success("Blacklist cleared")
+                st.rerun()
 
         st.markdown("---")
 
-        st.markdown("**Clear Tasks**")
-        st.caption(f"Delete all {len(tasks)} tasks and iterations")
-        if st.button("Clear All Tasks", type="secondary"):
-            count = clear_all_tasks()
-            st.success(f"Deleted {count} tasks")
-            st.rerun()
-
-    with col2:
-        st.markdown("**Clear Repositories**")
-        st.caption(f"Delete all {len(repos)} repos and their issues")
-        if st.button("Clear All Repositories", type="secondary"):
-            count = clear_all_repositories()
-            st.success(f"Deleted {count} repositories")
-            st.rerun()
+        st.markdown("**Reset Scan Progress**")
+        st.caption("Delete scan_progress.json to rescan from scratch")
+        if st.button("Reset All Scan Progress"):
+            import os
+            if os.path.exists("scan_progress.json"):
+                os.remove("scan_progress.json")
+                st.success("Scan progress reset")
+            else:
+                st.info("No scan progress file found")
 
         st.markdown("---")
 
-        st.markdown("**Clear Blacklist**")
-        st.caption(f"Delete all {len(blacklist)} blacklisted issues and {len(bl_repos)} repos")
-        if st.button("Clear All Blacklist", type="secondary"):
+        st.error("NUCLEAR OPTION: Delete Everything")
+        if st.button("DELETE ALL DATA", type="primary"):
+            clear_all_tasks()
+            clear_all_repositories()
             clear_blacklist()
             for r in bl_repos:
                 remove_repo_from_blacklist(
@@ -293,36 +325,8 @@ with tab_danger:
                     actor_user_id=current_user_id,
                     access_context=get_request_access_context(),
                 )
-            st.success("Blacklist cleared")
+            import os
+            if os.path.exists("scan_progress.json"):
+                os.remove("scan_progress.json")
+            st.success("All data deleted")
             st.rerun()
-
-    st.markdown("---")
-
-    st.markdown("**Reset Scan Progress**")
-    st.caption("Delete scan_progress.json to rescan from scratch")
-    if st.button("Reset All Scan Progress"):
-        import os
-        if os.path.exists("scan_progress.json"):
-            os.remove("scan_progress.json")
-            st.success("Scan progress reset")
-        else:
-            st.info("No scan progress file found")
-
-    st.markdown("---")
-
-    st.error("NUCLEAR OPTION: Delete Everything")
-    if st.button("DELETE ALL DATA", type="primary"):
-        clear_all_tasks()
-        clear_all_repositories()
-        clear_blacklist()
-        for r in bl_repos:
-            remove_repo_from_blacklist(
-                r.full_name,
-                actor_user_id=current_user_id,
-                access_context=get_request_access_context(),
-            )
-        import os
-        if os.path.exists("scan_progress.json"):
-            os.remove("scan_progress.json")
-        st.success("All data deleted")
-        st.rerun()

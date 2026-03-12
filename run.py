@@ -394,9 +394,9 @@ with action_col2:
     st.caption("Generate setup commands, dependencies, Dockerfile guidance, and checklists.")
     st.page_link("pages/3_Repo_Preparation.py", label="Open Repo Preparation", icon=":material/build:")
 with action_col3:
-    st.markdown("#### Model Evaluation")
-    st.caption("Compare candidate outputs with repository context and iterate evaluations.")
-    st.page_link("pages/6_Model_Evaluation.py", label="Open Model Evaluation", icon=":material/analytics:")
+    st.markdown("#### Final Submission")
+    st.caption("Submit final tar file, Anthropic ID, app version, base SHA, and links.")
+    st.page_link("pages/18_Final_Submission.py", label="Open Final Submission", icon=":material/assignment_turned_in:")
 
 render_section_banner(
     "Navigation",
@@ -418,7 +418,7 @@ with nav_col1:
 with nav_col2:
     st.markdown("#### Workflow")
     st.page_link("pages/3_Repo_Preparation.py", label="Repo Preparation", icon=":material/build:")
-    st.page_link("pages/6_Model_Evaluation.py", label="Model Evaluation", icon=":material/analytics:")
+    st.page_link("pages/18_Final_Submission.py", label="Final Submission", icon=":material/assignment_turned_in:")
     st.page_link("pages/5_Issue_Lookup.py", label="Issue Lookup", icon=":material/manage_search:")
 with nav_col3:
     st.markdown("#### Utilities")
@@ -454,8 +454,8 @@ st.markdown(
       </div>
       <div class="flow-card">
         <span class="flow-chip">Step D</span>
-        <h3 class="flow-title">Evaluate</h3>
-        <p class="flow-copy">Run structured model comparisons and track iteration quality over time.</p>
+        <h3 class="flow-title">Final Submission</h3>
+        <p class="flow-copy">Submit final tar file, Anthropic ID, app version, base SHA, repo/issue links, and Dockerfile.</p>
       </div>
     </div>
     """,
@@ -545,14 +545,16 @@ render_section_banner(
 if tasks:
     rows = []
     for task in tasks[:8]:
+        issue_url = getattr(task, "issue_url", None) or (getattr(getattr(task, "issue", None), "issue_url", None))
         rows.append(
             {
                 "Task": getattr(task, "name", "-"),
                 "Status": _status_label(getattr(task, "status", "")),
-                "Issue URL": getattr(task, "issue_url", None) or "-",
+                "Issue URL": issue_url or "-",
                 "Created": _fmt_dt(getattr(task, "created_at", None)),
             }
         )
-    st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+    df = pd.DataFrame(rows)
+    st.dataframe(df.astype(str), width="stretch", hide_index=True)
 else:
     st.info("No tasks yet. Use **Issue Finder** or **Task Key Request** to create your first task.")

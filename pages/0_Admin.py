@@ -134,7 +134,9 @@ with tabs[0]:
                     "User ID": u.id,
                     "Username": u.username,
                     "Email": u.email or "-",
-                    "Role": (getattr(u, "role", None) or ("admin" if u.is_admin else "user")).title(),
+                    "Role": {"user": "User", "admin": "Admin", "role_manager": "Manager"}.get(
+                        getattr(u, "role", None) or ("admin" if u.is_admin else "user"), "User"
+                    ),
                     "Last Login": _fmt_dt(u.last_login),
                     "Last Active": _fmt_dt(getattr(u, "last_active_at", None)),
                     "Last IP": getattr(u, "last_seen_ip", None) or "-",
@@ -142,7 +144,7 @@ with tabs[0]:
                     "Stats": f"S:{u.issues_submitted} R:{u.issues_reserved} C:{u.issues_completed}",
                 }
             )
-        st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+        st.dataframe(pd.DataFrame(rows).astype(str), width="stretch", hide_index=True)
 
         for verified_user in verified:
             if verified_user.is_admin:
@@ -246,9 +248,15 @@ with tabs[1]:
 
 with tabs[2]:
     st.subheader("Role Management")
-    st.caption("Assign roles to users. **role_manager** can approve labeling submissions and task key requests.")
+    st.caption(
+        "Assign roles. **user** = standard; **Manager** (role_manager) = can approve Task Key Requests, "
+        "Step 1 Task Submissions, and Final Submissions; **admin** = full access + this panel. "
+        "To make someone a manager: set Role to **Manager** and click Save."
+    )
 
     non_admin_users = [u for u in all_users if u.username != "rebumex"]
+    role_options = ["user", "admin", "role_manager"]
+    role_labels = {"user": "User", "admin": "Admin", "role_manager": "Manager"}
     if non_admin_users:
         for u in sorted(non_admin_users, key=lambda x: x.username.lower()):
             col1, col2, col3 = st.columns([3, 2, 1])
@@ -256,10 +264,13 @@ with tabs[2]:
                 st.markdown(f"**{u.username}** ({u.email or '-'})")
             with col2:
                 current_role = getattr(u, "role", "user") or "user"
+                if current_role not in role_options:
+                    current_role = "user"
                 new_role = st.selectbox(
                     "Role",
-                    ["user", "admin", "role_manager"],
-                    index=["user", "admin", "role_manager"].index(current_role),
+                    options=role_options,
+                    format_func=lambda x: role_labels.get(x, x),
+                    index=role_options.index(current_role),
                     key=f"role_{u.id}",
                     label_visibility="collapsed",
                 )
@@ -267,10 +278,10 @@ with tabs[2]:
                 if new_role != current_role:
                     if st.button("Save", key=f"save_role_{u.id}", type="primary"):
                         set_user_role(u.id, new_role)
-                        st.success(f"Role updated to {new_role}")
+                        st.success(f"Role updated to {role_labels.get(new_role, new_role)}")
                         st.rerun()
                 else:
-                    st.caption(current_role)
+                    st.caption(role_labels.get(current_role, current_role))
     else:
         st.info("No users to manage.")
 
@@ -318,7 +329,7 @@ with tabs[3]:
                 "Approved By": approver.username if approver else "-",
                 "Created": _fmt_dt(req.created_at),
             })
-        st.dataframe(_pd.DataFrame(rows), width="stretch", hide_index=True)
+        st.dataframe(_pd.DataFrame(rows).astype(str), width="stretch", hide_index=True)
 
 with tabs[4]:
     st.subheader("User Activity Log")
@@ -372,14 +383,14 @@ with tabs[4]:
                     "Feature": row["feature"] or "-",
                     "Repo": row["repo_full_name"] or "-",
                     "Issue": row["issue_url"] or (f"#{row['issue_number']}" if row["issue_number"] else "-"),
-                    "Task ID": row["task_id"] or "-",
+                    "Task ID": str(row["task_id"]) if row["task_id"] is not None else "-",
                     "IP": row["ip_address"] or "-",
                     "Device": (row["device_fingerprint"] or "-")[:18],
                     "Country": row["country"] or "-",
                     "Location": row["location"] or "-",
                 }
             )
-        st.dataframe(pd.DataFrame(display_rows), width="stretch", hide_index=True)
+        st.dataframe(pd.DataFrame(display_rows).astype(str), width="stretch", hide_index=True)
     else:
         st.info("No activities match the current filters.")
 
@@ -401,7 +412,7 @@ with tabs[5]:
                     "Location": row["last_seen_location"] or "-",
                 }
             )
-        st.dataframe(pd.DataFrame(display_rows), width="stretch", hide_index=True)
+        st.dataframe(pd.DataFrame(display_rows).astype(str), width="stretch", hide_index=True)
     else:
         st.info("No active users in the selected window.")
 
@@ -430,7 +441,7 @@ with tabs[6]:
                     }
                     for row in usage_rows
                 ]
-            ),
+            ).astype(str),
             width="stretch",
             hide_index=True,
         )
@@ -476,14 +487,14 @@ with tabs[7]:
                         "Feature": row["feature"] or "-",
                         "Repo": row["repo_full_name"] or "-",
                         "Issue": row["issue_url"] or (f"#{row['issue_number']}" if row["issue_number"] else "-"),
-                        "Task ID": row["task_id"] or "-",
+                        "Task ID": str(row["task_id"]) if row["task_id"] is not None else "-",
                         "IP": row["ip_address"] or "-",
                         "Country": row["country"] or "-",
                         "Location": row["location"] or "-",
                     }
                     for row in work_rows
                 ]
-            ),
+            ).astype(str),
             width="stretch",
             hide_index=True,
         )

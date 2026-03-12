@@ -1,12 +1,12 @@
 """
-Task Submission Page - Users submit completed task deliverables (tar file, issue link, description).
+Step 1 Task Submission - Users submit completed task deliverables (tar file, issue link, description).
 Approvers review and respond with a tar file, commit SHA, issue link, and repo link.
 """
 import os
 import sys
 import shutil
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -27,15 +27,15 @@ from src.ui.sidebar import quick_hide, render_sidebar, require_auth
 
 init_db()
 
-st.set_page_config(page_title="Task Submission", page_icon=":material/upload_file:", layout="wide")
+st.set_page_config(page_title="Step 1 Task Submission", page_icon=":material/upload_file:", layout="wide")
 quick_hide()
 render_sidebar()
-current_user = require_auth("Task Submission")
+current_user = require_auth("Step 1 Task Submission")
 
 UPLOAD_DIR = Path(__file__).parent.parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
-st.title("Task Submission")
+st.title("Step 1 Task Submission")
 
 st.markdown("""
 **Submit your completed task** — upload the tar file of your repository, provide the issue link and a description.
@@ -48,7 +48,7 @@ st.markdown("---")
 def save_uploaded_file(uploaded_file, subfolder: str) -> str:
     dest_dir = UPLOAD_DIR / subfolder
     dest_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
     safe_name = uploaded_file.name.replace(" ", "_")
     filename = f"{timestamp}_{safe_name}"
     dest = dest_dir / filename

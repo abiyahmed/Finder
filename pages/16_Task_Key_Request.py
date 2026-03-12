@@ -34,7 +34,7 @@ current_user = require_auth("Task Key Request")
 st.title("Task Key Request")
 
 st.markdown("""
-**User Flow:** :orange[**1. Request Key**] → 2. Repo Preparation → 3. Model Evaluation → 4. Labeling → 5. Complete
+**User Flow:** :orange[**1. Request Key**] → 2. Repo Preparation → 3. Step 1 Task Submission → 4. Final Submission
 
 Submit your HFI auth key/link along with a task name. An approver will review and respond with a key you can use.
 """)

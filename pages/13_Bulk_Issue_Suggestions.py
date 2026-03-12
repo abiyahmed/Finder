@@ -3,7 +3,7 @@ Bulk Issue Suggestions Page - paste many issue URLs and get qualified suggestion
 """
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
@@ -263,7 +263,7 @@ if run_clicked:
         progress.progress(1.0, text="Completed")
 
         run_payload = {
-            "run_at": datetime.utcnow().isoformat(),
+            "run_at": datetime.now(timezone.utc).isoformat(),
             "input_stats": extraction,
             "processed_urls": process_urls,
             "cached_urls": [row["issue_url"] for row in cached_suggestions],
