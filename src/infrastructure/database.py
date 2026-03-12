@@ -432,6 +432,7 @@ class TaskKeyRequest(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     project_name = Column(String(255), nullable=False)
     auth_key = Column(Text, nullable=False)
+    response_key = Column(Text, nullable=True)
     status = Column(String(20), default="pending")  # pending, approved, rejected
     approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     approved_at = Column(DateTime, nullable=True)
@@ -534,6 +535,10 @@ def _migrate_db():
 
     _add_columns_if_missing(inspector, "good_issues", [
         ("is_public", "INTEGER DEFAULT 1"),
+    ])
+
+    _add_columns_if_missing(inspector, "task_key_requests", [
+        ("response_key", "TEXT"),
     ])
 
     _add_columns_if_missing(inspector, "labeling_submissions", [
@@ -3622,6 +3627,7 @@ def get_task_key_requests_by_user(user_id: int) -> list[TaskKeyRequest]:
 def approve_task_key_request(
     request_id: int,
     approver_user_id: int,
+    response_key: str = None,
     task_id: int = None,
     access_context: Optional[dict] = None,
 ) -> Optional[TaskKeyRequest]:
@@ -3632,10 +3638,10 @@ def approve_task_key_request(
             req.status = "approved"
             req.approved_by = approver_user_id
             req.approved_at = datetime.utcnow()
+            req.response_key = response_key
             if task_id:
                 req.task_id = task_id
 
-            # If the request is linked to a task, update the task's HFI session
             linked_task_id = task_id or req.task_id
             if linked_task_id:
                 task = session.query(Task).filter_by(id=linked_task_id).first()
