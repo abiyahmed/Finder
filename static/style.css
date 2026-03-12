@@ -1,0 +1,5 @@
+/* Hide default Streamlit page navigation immediately */
+[data-testid="stSidebarNav"],
+[data-testid="stSidebarNavItems"] {
+    display: none !important;
+}
