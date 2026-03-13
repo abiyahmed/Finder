@@ -180,9 +180,7 @@ git checkout -- .
   - The command will output trajectory session IDs that you should save
 
 - [x] **Authenticate via browser:**
-  - HFI will open a browser window for Auth0 login
-  - Use your Rebirth expert email to log in
-  - Complete the authentication process
+  - Authenticate by sending to kira.
 
 - [x] **Enter HFI code:**
   - When prompted, enter: `cc_agentic_coding`

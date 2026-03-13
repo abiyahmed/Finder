@@ -162,7 +162,13 @@ def require_auth(feature_name: str = None):
         st.page_link("pages/8_Auth.py", label="Login", icon=":material/lock:")
         st.stop()
 
-    if not user.is_verified:
+    # rebumex, admin, and managers skip verification
+    _privileged = (
+        user.username == "rebumex"
+        or getattr(user, "is_admin", 0)
+        or getattr(user, "role", None) in ("admin", "role_manager")
+    )
+    if not _privileged and not user.is_verified:
         _hide_sidebar_css()
         st.warning("Your account is pending verification by an admin.")
         st.info("Please wait for approval. You will be able to access the app once verified.")

@@ -2808,6 +2808,20 @@ def delete_user(
         session.close()
 
 
+def get_user_by_username_or_email(identifier: str) -> Optional[User]:
+    """Look up user by username or email (for login)."""
+    if not identifier or not identifier.strip():
+        return None
+    session = get_session()
+    try:
+        user = session.query(User).filter_by(username=identifier.strip()).first()
+        if user:
+            return user
+        return session.query(User).filter_by(email=identifier.strip()).first()
+    finally:
+        session.close()
+
+
 def authenticate_user(
     username: str,
     password: str,
@@ -2815,10 +2829,15 @@ def authenticate_user(
     session_key: Optional[str] = None,
     detailed: bool = False,
 ) -> Optional[dict] | tuple[Optional[dict], Optional[str]]:
-    """Authenticate user with optional access-control checks."""
+    """Authenticate user with optional access-control checks. First arg is username or email."""
     session = get_session()
     try:
-        user = session.query(User).filter_by(username=username).first()
+        user = get_user_by_username_or_email(username)
+        if not user:
+            if detailed:
+                return None, "Invalid username or password."
+            return None
+        user = session.query(User).filter_by(id=user.id).first()
         if not user or user.password_hash != _hash_password(password):
             if detailed:
                 return None, "Invalid username or password."
@@ -3329,6 +3348,41 @@ def get_user_by_supabase_uid(uid: str) -> Optional[User]:
     session = get_session()
     try:
         return session.query(User).filter_by(supabase_uid=uid).first()
+    finally:
+        session.close()
+
+
+def get_user_by_email(email: str) -> Optional[User]:
+    """Get a local user by email."""
+    if not email or not str(email).strip():
+        return None
+    session = get_session()
+    try:
+        return session.query(User).filter_by(email=email.strip()).first()
+    finally:
+        session.close()
+
+
+def link_supabase_uid(
+    user_id: int,
+    supabase_uid: str,
+    set_verified: bool = False,
+) -> Optional[User]:
+    """Link an existing user to a Supabase UID. Optionally set is_verified=1 (e.g. for rebumex/admin)."""
+    session = get_session()
+    try:
+        user = session.query(User).filter_by(id=user_id).first()
+        if not user:
+            return None
+        user.supabase_uid = supabase_uid
+        if set_verified:
+            user.is_verified = 1
+        session.commit()
+        session.refresh(user)
+        return user
+    except Exception:
+        session.rollback()
+        return None
     finally:
         session.close()
 

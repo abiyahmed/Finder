@@ -167,3 +167,6 @@ Prepare a codebase at a specific commit state with a working Dockerfile, frozen 
 - [ ] Verify repository is in a clean state (no uncommitted changes)
 
 ---
+
+
+Send to Kira For Approval through the Platform

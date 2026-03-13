@@ -12,6 +12,8 @@ from src.infrastructure.database import (
     init_db,
     get_user_by_id,
     get_user_by_supabase_uid,
+    get_user_by_email,
+    link_supabase_uid,
     create_user_from_supabase,
     authenticate_user,
     create_user,
@@ -45,12 +47,21 @@ st.markdown("""
 # CHECK IF ALREADY LOGGED IN
 # =========================
 
+def _user_skips_verification(u):
+    """rebumex, admin, and managers skip verification."""
+    return (
+        (u and u.username == "rebumex")
+        or getattr(u, "is_admin", 0)
+        or getattr(u, "role", None) in ("admin", "role_manager")
+    )
+
+
 if "user_id" in st.session_state and st.session_state.get("user_id"):
     user = get_user_by_id(st.session_state["user_id"])
     if user:
         st.success(f"Logged in as **{user.username}**")
 
-        if user.is_verified:
+        if user.is_verified or _user_skips_verification(user):
             st.page_link("run.py", label="Go to Dashboard", icon=":material/dashboard:")
         else:
             st.warning("Your account is pending admin verification.")
@@ -79,7 +90,7 @@ tab_login, tab_signup = st.tabs(["Login", "Sign Up"])
 with tab_login:
     st.subheader("Login")
 
-    login_email = st.text_input("Email", key="login_email")
+    login_email = st.text_input("Email or username", key="login_email")
     login_password = st.text_input("Password", type="password", key="login_pass")
 
     if st.button("Login", type="primary", key="login_btn"):
@@ -94,10 +105,16 @@ with tab_login:
 
                 local_user = get_user_by_supabase_uid(supabase_uid)
                 if not local_user:
-                    username = email.split("@")[0]
-                    user_data = create_user_from_supabase(username, email, supabase_uid, access_context)
-                    if user_data:
-                        local_user = get_user_by_id(user_data["id"])
+                    existing_by_email = get_user_by_email(email)
+                    if existing_by_email:
+                        set_verified = _user_skips_verification(existing_by_email)
+                        link_supabase_uid(existing_by_email.id, supabase_uid, set_verified=set_verified)
+                        local_user = get_user_by_id(existing_by_email.id)
+                    else:
+                        username = email.split("@")[0]
+                        user_data = create_user_from_supabase(username, email, supabase_uid, access_context)
+                        if user_data:
+                            local_user = get_user_by_id(user_data["id"])
 
                 if local_user:
                     st.session_state["user_id"] = local_user.id
@@ -123,9 +140,9 @@ with tab_login:
                     st.success(f"Welcome back, {user_data['username']}!")
                     st.rerun()
                 else:
-                    st.error(result.get("error", "Invalid credentials"))
+                    st.error(error_message or "Invalid credentials")
         else:
-            st.warning("Please enter email and password")
+            st.warning("Please enter email or username and password")
 
 # =========================
 # SIGNUP TAB
