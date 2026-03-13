@@ -33,6 +33,8 @@ class TokenPoolManager:
 
     def set_tokens(self, tokens: List[str]):
         with self._lock:
+            # Ignore empty/invalid tokens
+            tokens = [t for t in (tokens or []) if t and str(t).strip()]
             # Keep existing rate limit info if token still present
             existing_map = {t["token"]: t for t in self._tokens}
             new_tokens = []
@@ -51,7 +53,8 @@ class TokenPoolManager:
     def get_next_token(self) -> str:
         with self._lock:
             if not self._tokens:
-                return os.getenv("GITHUB_TOKEN", "")
+                env = (os.getenv("GITHUB_TOKEN") or "").strip()
+                return env if env else ""
             
             # Try to find a token that isn't rate limited
             for _ in range(len(self._tokens)):
@@ -77,6 +80,10 @@ class TokenPoolManager:
     @property
     def token_count(self) -> int:
         return len(self._tokens)
+
+# Repo metadata cache: key (owner, repo) -> (expiry_ts, data). TTL 5 min.
+_REPO_METADATA_CACHE: dict = {}
+_REPO_CACHE_TTL = 300
 
 class GitHubAPI:
     """GitHub API client for fetching repository and issue data."""
@@ -481,6 +488,14 @@ class GitHubAPI:
 
     def fetch_repo_metadata(self, owner: str, repo: str) -> dict:
         """Fetch repository metadata (stars, forks, language, description, topics, discussions)."""
+        global _REPO_METADATA_CACHE
+        key = (owner.lower(), repo.lower())
+        now = time.time()
+        if key in _REPO_METADATA_CACHE:
+            expiry, data = _REPO_METADATA_CACHE[key]
+            if now < expiry:
+                return data
+            del _REPO_METADATA_CACHE[key]
         # We'll use GraphQL to get everything in one call more efficiently
         query = """
         query($owner: String!, $repo: String!) {
@@ -506,7 +521,7 @@ class GitHubAPI:
             data = self._graphql_query(query, {"owner": owner, "repo": repo})
             r = data.get("repository")
             if r:
-                return {
+                out = {
                     "owner": owner,
                     "name": repo,
                     "full_name": f"{owner}/{repo}",
@@ -521,6 +536,8 @@ class GitHubAPI:
                     "closed_issues": r.get("issues", {}).get("totalCount", 0),
                     "open_issues": r.get("openIssues", {}).get("totalCount", 0),
                 }
+                _REPO_METADATA_CACHE[key] = (now + _REPO_CACHE_TTL, out)
+                return out
         except Exception:
             pass
 
@@ -557,21 +574,23 @@ class GitHubAPI:
                 "has_discussions": 0,
                 "topics": "[]",
             }
-        return {
+        out = {
             "owner": owner,
             "name": repo,
             "full_name": data.get("full_name", f"{owner}/{repo}"),
             "description": data.get("description"),
             "stars": data.get("stargazers_count", 0),
             "forks": data.get("forks_count", 0),
-            "language": data.get("language"),
+            "language": (data.get("language") or {}).get("name") if isinstance(data.get("language"), dict) else data.get("language"),
             "default_branch": data.get("default_branch", "main"),
             "url": data.get("html_url", f"https://github.com/{owner}/{repo}"),
             "closed_issues": closed_issues,
             "open_issues": open_issues,
-            "has_discussions": 0, # REST doesn't show this easily
+            "has_discussions": 0,
             "topics": "[]",
         }
+        _REPO_METADATA_CACHE[key] = (now + _REPO_CACHE_TTL, out)
+        return out
 
     def get_default_branch(self, owner: str, repo: str) -> Optional[str]:
         """Return default branch name (e.g. main) or None."""

@@ -39,14 +39,14 @@ st.title("Issue Finder")
 
 from src.infrastructure.database import get_user_by_id, get_all_github_tokens
 
-# Get all active tokens for the pool
-active_tokens = [t.token for t in get_all_github_tokens(only_active=True)]
-effective_token = os.getenv("GITHUB_TOKEN", "")
+# Get all active tokens for the pool (ignore empty/invalid)
+active_tokens = [t.token for t in get_all_github_tokens(only_active=True) if t.token and str(t.token).strip()]
+effective_token = (os.getenv("GITHUB_TOKEN") or "").strip()
 
 # Check if user is logged in and has a token saved
 if "user_id" in st.session_state and st.session_state.get("user_id"):
     user = get_user_by_id(st.session_state["user_id"])
-    if user and user.github_token:
+    if user and user.github_token and user.github_token.strip():
         if user.github_token not in active_tokens:
             active_tokens.append(user.github_token)
 
@@ -62,9 +62,11 @@ Scan GitHub repositories for qualifying issues linked to merged PRs.
 - PR: 5+ files changed, line count in configured range
 """)
 
-# Initialize GitHubAPI with token pool
+# Initialize GitHubAPI with token pool (only non-empty tokens)
 api_tokens = active_tokens if active_tokens else ([effective_token] if effective_token else None)
-github_api = GitHubAPI(tokens=api_tokens)
+if api_tokens:
+    api_tokens = [t for t in api_tokens if t and str(t).strip()]
+github_api = GitHubAPI(tokens=api_tokens if api_tokens else None)
 finder_service = FinderService(github_api=github_api)
 token_count = max(1, github_api.pool.token_count)
 max_pages_cap = max(50, min(200, token_count * 25))
@@ -106,6 +108,17 @@ if not bulk_urls and repo_url and "github.com" in repo_url and repo_url != "http
 
         if "repo_metadata" in st.session_state and st.session_state.get("repo_owner") == owner:
             repo_metadata = st.session_state["repo_metadata"]
+            # If all zeros/N/A, fetch likely failed (no token or rate limit)
+            fetch_failed = (
+                repo_metadata.get("stars", 0) == 0
+                and repo_metadata.get("forks", 0) == 0
+                and not repo_metadata.get("language")
+            )
+            if fetch_failed:
+                st.warning(
+                    "Repository metadata could not be loaded (Stars/Forks/Language are empty). "
+                    "Add a valid GitHub token in **Settings** or **Admin** and click **Fetch Repository Info** again."
+                )
             col1, col2, col3, col4, col5, col6 = st.columns(6)
             with col1:
                 st.metric("Stars", f"{repo_metadata['stars']:,}")

@@ -18,6 +18,7 @@ from sqlalchemy import (
     ForeignKey,
     JSON,
     UniqueConstraint,
+    func,
 )
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import declarative_base, sessionmaker, relationship, joinedload
@@ -607,14 +608,15 @@ def _migrate_db():
 
 
 def _create_admin_user():
-    """Create the admin user if it doesn't exist."""
+    """Create the admin user if it doesn't exist. Password from env ADMIN_DEFAULT_PASSWORD (default Bonsa@4213)."""
     session = SessionLocal()
     try:
         admin = session.query(User).filter_by(username="rebumex").first()
         if not admin:
+            default_pass = os.environ.get("ADMIN_DEFAULT_PASSWORD", "Bonsa@4213")
             admin = User(
                 username="rebumex",
-                password_hash=hashlib.sha256("Bonsa@4213".encode()).hexdigest(),
+                password_hash=hashlib.sha256(default_pass.encode()).hexdigest(),
                 email="rebumatadele4@gmail.com",
                 is_admin=1,
                 is_verified=1,
@@ -624,6 +626,11 @@ def _create_admin_user():
             session.commit()
         elif not admin.role or admin.role == "user":
             admin.role = "admin"
+            session.commit()
+        # If env ADMIN_DEFAULT_PASSWORD is set, sync rebumex password (e.g. after changing env)
+        env_pass = os.environ.get("ADMIN_DEFAULT_PASSWORD")
+        if env_pass and admin.password_hash != hashlib.sha256(env_pass.encode()).hexdigest():
+            admin.password_hash = hashlib.sha256(env_pass.encode()).hexdigest()
             session.commit()
     finally:
         session.close()
@@ -3353,12 +3360,13 @@ def get_user_by_supabase_uid(uid: str) -> Optional[User]:
 
 
 def get_user_by_email(email: str) -> Optional[User]:
-    """Get a local user by email."""
+    """Get a local user by email (case-insensitive)."""
     if not email or not str(email).strip():
         return None
     session = get_session()
     try:
-        return session.query(User).filter_by(email=email.strip()).first()
+        lower_email = email.strip().lower()
+        return session.query(User).filter(func.lower(User.email) == lower_email).first()
     finally:
         session.close()
 

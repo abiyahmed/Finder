@@ -33,6 +33,18 @@ Rebirth/
 | Run app | `python -m streamlit run run.py` |
 | Run tests | `python -m pytest tests/` |
 
+## Admin / rebumex login
+
+The default admin user **rebumex** is created on first run. Default password: **`Bonsa@4213`** (use **Email or username** = `rebumex` and this password for legacy login).
+
+To use a different password (e.g. `Rebu@4213`), set in env or Streamlit secrets:
+
+- **`ADMIN_DEFAULT_PASSWORD=Rebu@4213`**
+
+On next app start, the rebumex password is updated to that value. You can then log in with username `rebumex` and the password you set.
+
+If you use **Supabase** login with the rebumex email, the app links that Supabase account to the existing rebumex user and skips verification.
+
 ## Streamlit Cloud: Keep data across redeploys
 
 To avoid losing users and data when the app is redeployed:
