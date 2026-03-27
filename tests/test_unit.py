@@ -99,6 +99,15 @@ class TestGitHubAPIValidation:
         assert ok is False
         assert "image" in reason
 
+    def test_categorize_file_includes_js_ts_as_code(self):
+        assert GitHubAPI.categorize_file("src/app/index.js") == "python"
+        assert GitHubAPI.categorize_file("src/app/index.ts") == "python"
+        assert GitHubAPI.categorize_file("src/app/widget.tsx") == "python"
+
+    def test_categorize_file_js_ts_tests(self):
+        assert GitHubAPI.categorize_file("src/__tests__/app.test.tsx") == "test"
+        assert GitHubAPI.categorize_file("specs/widget.spec.js") == "test"
+
 
 class TestBulkIssueService:
     def test_parse_issue_url_normalizes_standard_issue(self):

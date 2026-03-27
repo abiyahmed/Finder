@@ -29,6 +29,7 @@ from src.ui.activity_tracker import (
     track_logout,
 )
 from src.ui.sidebar import apply_app_theme
+from src.ui.session_cookie import set_session_cookie, delete_session_cookie
 
 init_db()
 
@@ -68,6 +69,7 @@ if "user_id" in st.session_state and st.session_state.get("user_id"):
 
         if st.button("Logout"):
             track_logout(user.id)
+            delete_session_cookie()
             supabase_sign_out(st.session_state.get("supabase_access_token"))
             for key in ("user_id", "username", "supabase_access_token", "supabase_refresh_token"):
                 st.session_state.pop(key, None)
@@ -121,6 +123,7 @@ with tab_login:
                     st.session_state["username"] = local_user.username
                     st.session_state["supabase_access_token"] = result["session"].get("access_token")
                     st.session_state["supabase_refresh_token"] = result["session"].get("refresh_token")
+                    set_session_cookie(local_user.id)
                     st.success(f"Welcome back, {local_user.username}!")
                     st.rerun()
                 else:
@@ -137,6 +140,7 @@ with tab_login:
                 if user_data:
                     st.session_state["user_id"] = user_data["id"]
                     st.session_state["username"] = user_data["username"]
+                    set_session_cookie(user_data["id"])
                     st.success(f"Welcome back, {user_data['username']}!")
                     st.rerun()
                 else:
@@ -176,6 +180,7 @@ with tab_signup:
                 if user_data:
                     st.session_state["user_id"] = user_data["id"]
                     st.session_state["username"] = user_data["username"]
+                    set_session_cookie(user_data["id"])
                     if result["session"].get("access_token"):
                         st.session_state["supabase_access_token"] = result["session"]["access_token"]
                         st.session_state["supabase_refresh_token"] = result["session"]["refresh_token"]
@@ -193,6 +198,7 @@ with tab_signup:
                 if user_data:
                     st.session_state["user_id"] = user_data["id"]
                     st.session_state["username"] = user_data["username"]
+                    set_session_cookie(user_data["id"])
                     get_tracking_session_key()
                     st.success(f"Account created! Welcome, {user_data['username']}!")
                     st.info("Please wait for admin verification to access the app.")

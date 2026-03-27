@@ -14,6 +14,11 @@ from src.infrastructure.database import (
     get_user_by_supabase_uid,
 )
 from src.ui.activity_tracker import touch_authenticated_user, track_logout
+from src.ui.session_cookie import (
+    get_session_from_cookie,
+    set_session_cookie,
+    delete_session_cookie,
+)
 
 # CSS to hide default nav - injected as early as possible.
 HIDE_NAV_CSS = '<style>[data-testid="stSidebarNav"]{display:none!important;}</style>'
@@ -133,19 +138,30 @@ def require_auth(feature_name: str = None):
     apply_app_theme()
 
     if "user_id" not in st.session_state or not st.session_state.get("user_id"):
-        # Try recovering from a Supabase token if present
-        token = st.session_state.get("supabase_access_token")
-        if token:
+        # Try recovering from session cookie (survives page refresh)
+        cookie_user_id = get_session_from_cookie()
+        if cookie_user_id:
             try:
-                from src.infrastructure.supabase_client import supabase_get_user
-                sb_user = supabase_get_user(token)
-                if sb_user:
-                    local_user = get_user_by_supabase_uid(sb_user["id"])
-                    if local_user:
-                        st.session_state["user_id"] = local_user.id
-                        st.session_state["username"] = local_user.username
+                local_user = get_user_by_id(cookie_user_id)
+                if local_user:
+                    st.session_state["user_id"] = local_user.id
+                    st.session_state["username"] = local_user.username
             except Exception:
                 pass
+        # Else try Supabase token if present
+        if ("user_id" not in st.session_state or not st.session_state.get("user_id")):
+            token = st.session_state.get("supabase_access_token")
+            if token:
+                try:
+                    from src.infrastructure.supabase_client import supabase_get_user
+                    sb_user = supabase_get_user(token)
+                    if sb_user:
+                        local_user = get_user_by_supabase_uid(sb_user["id"])
+                        if local_user:
+                            st.session_state["user_id"] = local_user.id
+                            st.session_state["username"] = local_user.username
+                except Exception:
+                    pass
 
     if "user_id" not in st.session_state or not st.session_state.get("user_id"):
         _hide_sidebar_css()
@@ -153,10 +169,19 @@ def require_auth(feature_name: str = None):
         st.page_link("pages/8_Auth.py", label="Login / Sign Up", icon=":material/lock:")
         st.stop()
 
-    user = get_user_by_id(st.session_state["user_id"])
+    try:
+        user = get_user_by_id(st.session_state["user_id"])
+    except Exception:
+        _hide_sidebar_css()
+        st.error("Database temporarily unavailable. Please try again in a moment.")
+        if st.button("Retry"):
+            st.rerun()
+        st.stop()
+
     if not user:
         _hide_sidebar_css()
         st.error("Session expired. Please login again.")
+        delete_session_cookie()
         if "user_id" in st.session_state:
             del st.session_state["user_id"]
         st.page_link("pages/8_Auth.py", label="Login", icon=":material/lock:")
@@ -174,6 +199,7 @@ def require_auth(feature_name: str = None):
         st.info("Please wait for approval. You will be able to access the app once verified.")
         if st.button("Logout"):
             track_logout(user.id)
+            delete_session_cookie()
             del st.session_state["user_id"]
             st.rerun()
         st.stop()
@@ -183,6 +209,9 @@ def require_auth(feature_name: str = None):
     except Exception:
         # Access telemetry must not block normal app usage.
         pass
+
+    # Keep session cookie set so refresh keeps user logged in
+    set_session_cookie(user.id)
 
     return user
 
@@ -214,7 +243,10 @@ def render_sidebar():
 
     with st.sidebar:
         if "user_id" in st.session_state and st.session_state.get("user_id"):
-            user = get_user_by_id(st.session_state["user_id"])
+            try:
+                user = get_user_by_id(st.session_state["user_id"])
+            except Exception:
+                user = None
             if user:
                 status_text = "Verified" if user.is_verified else "Pending"
                 role_badge = ""
@@ -285,7 +317,10 @@ def render_sidebar():
             st.caption(f"Issues found: {len(issues)} | Tasks: {len(tasks)}")
 
             if "user_id" in st.session_state:
-                _u = get_user_by_id(st.session_state["user_id"])
+                try:
+                    _u = get_user_by_id(st.session_state["user_id"])
+                except Exception:
+                    _u = None
                 if _u and can_approve(_u):
                     pending_labels = len(get_pending_labeling_submissions())
                     pending_keys = len(get_pending_task_key_requests())

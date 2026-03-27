@@ -161,14 +161,18 @@ with main_col3:
 # Filters in expander
 with st.expander("Filter Settings", expanded=False):
     
-    # Python Requirements - Most Important
-    st.markdown("##### Python Requirements")
+    # Code Requirements - Most Important
+    st.markdown("##### Code Requirements (Py/JS/TS)")
     py_col1, py_col2, py_col3 = st.columns(3)
     with py_col1:
-        min_total_py = st.number_input("Total Py Files", min_value=0, value=4, 
-            help="Py + Test files combined (e.g., 4 = 3 py + 1 test). REQUIRED even in target mode.")
+        min_total_py = st.number_input(
+            "Total Code+Test Files",
+            min_value=0,
+            value=4,
+            help="Code + Test files combined (e.g., 4 = 3 code + 1 test). REQUIRED even in target mode.",
+        )
     with py_col2:
-        min_python = st.number_input("Min Py (excl tests)", min_value=0, value=1)
+        min_python = st.number_input("Min Code (excl tests)", min_value=0, value=1)
     with py_col3:
         min_test = st.number_input("Min Test Files", min_value=0, value=1)
     
@@ -185,19 +189,26 @@ with st.expander("Filter Settings", expanded=False):
     with size_col3:
         max_lines = st.number_input("Max Lines", min_value=100, value=700)
     with size_col4:
-        min_python_lines = st.number_input("Min Py Lines", min_value=0, value=50)
+        min_python_lines = st.number_input("Min Code Lines", min_value=0, value=50)
     
     st.markdown("---")
     
     # Other Settings
     st.markdown("##### Other")
-    other_col1, other_col2, other_col3 = st.columns(3)
+    other_col1, other_col2, other_col3, other_col4 = st.columns(4)
     with other_col1:
         min_doc = st.number_input("Min Doc Files", min_value=0, value=0)
     with other_col2:
         ignore_urls_in_code = st.checkbox("Ignore URLs in code", value=True)
     with other_col3:
         require_repo_tests = st.checkbox("Repo needs tests", value=True)
+    with other_col4:
+        repo_language_filter = st.selectbox(
+            "Primary Language",
+            ["Any", "Python", "JavaScript", "TypeScript"],
+            index=0,
+            help="Skip repos whose primary language does not match.",
+        )
     
     st.markdown("---")
     
@@ -269,6 +280,15 @@ if run_scan:
                     github_api.target_issues = remaining_target
                 else:
                     github_api.target_issues = target_issues
+
+                if repo_language_filter != "Any":
+                    _, _, repo_metadata = finder_service.fetch_repo_info(url)
+                    repo_language = (repo_metadata.get("language") or "").lower()
+                    if repo_language != repo_language_filter.lower():
+                        st.info(
+                            f"Skipping {url} (primary language: {repo_metadata.get('language') or 'Unknown'})"
+                        )
+                        continue
 
                 repo_id, issues, analytics = finder_service.scan_and_store_issues(url, log_callback=log_cb)
                 results_summary.append({
@@ -429,7 +449,9 @@ if run_scan:
             
             for nm in near_misses[:5]:
                 with st.expander(f"Issue #{nm['issue_number']}: {nm['issue_title'][:50]}..."):
-                    st.markdown(f"**PR #{nm['pr_number']}** | Python: {nm['python_files']} files, {nm['python_lines']} lines")
+                    st.markdown(
+                        f"**PR #{nm['pr_number']}** | Code (Py/JS/TS): {nm['python_files']} files, {nm['python_lines']} lines"
+                    )
                     st.markdown(f"**Failed on:** {', '.join(nm['fail_reasons'])}")
                     st.markdown(f"[View Issue]({nm['issue_url']})")
         elif near_misses:
@@ -476,7 +498,7 @@ if current_scan_issues:
             "Title": i.issue_title[:40] + "..." if len(i.issue_title) > 40 else i.issue_title,
             "PR #": i.pr_number, 
             "Files": i.pr_files_changed,
-            "Py": getattr(i, 'pr_python_files', 0) or 0,
+            "Code": getattr(i, 'pr_python_files', 0) or 0,
             "Test": getattr(i, 'pr_test_files', 0) or 0,
             "Lines": f"+{i.pr_additions}/-{i.pr_deletions}",
         } for i in current_scan_issues]
@@ -527,7 +549,7 @@ if issues_db:
         "Title": i.issue_title[:40] + "..." if len(i.issue_title) > 40 else i.issue_title,
         "PR #": i.pr_number, 
         "Files": i.pr_files_changed,
-        "Py": getattr(i, 'pr_python_files', 0) or 0,
+        "Code": getattr(i, 'pr_python_files', 0) or 0,
         "Test": getattr(i, 'pr_test_files', 0) or 0,
         "Doc": getattr(i, 'pr_doc_files', 0) or 0,
         "Lines": f"+{i.pr_additions}/-{i.pr_deletions}",
@@ -619,7 +641,7 @@ if issues_db:
         other_files = getattr(sel, 'pr_other_files', 0) or 0
         lock_ignored = getattr(sel, 'pr_lock_files_ignored', 0) or 0
         
-        bcol1.metric("Python", f"{py_files} files", f"{py_lines} lines")
+        bcol1.metric("Code (Py/JS/TS)", f"{py_files} files", f"{py_lines} lines")
         bcol2.metric("Tests", f"{test_files} files", f"{test_lines} lines")
         bcol3.metric("Docs", f"{doc_files} files", f"{doc_lines} lines")
         bcol4.metric("Other", f"{other_files} files")

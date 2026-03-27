@@ -45,6 +45,14 @@ On next app start, the rebumex password is updated to that value. You can then l
 
 If you use **Supabase** login with the rebumex email, the app links that Supabase account to the existing rebumex user and skips verification.
 
+## Login sessions (persist across refresh; expire only on logout)
+
+Login is stored in a **signed cookie** as well as in-memory, so **refreshing the page keeps you logged in**. You are logged out only when you click **Logout**.
+
+- **Cookie:** A signed cookie (`rebirth_sid`) is set on login and cleared on logout. It lasts 30 days and is refreshed on each visit.
+- **Optional:** Set `SESSION_SECRET` in env or Streamlit secrets (e.g. a long random string) so cookie values cannot be forged.
+- **"Session expired"** means your user was not found in the DB. **"Database temporarily unavailable"** means a transient DB error; use **Retry**.
+
 ## Streamlit Cloud: Keep data across redeploys
 
 To avoid losing users and data when the app is redeployed:

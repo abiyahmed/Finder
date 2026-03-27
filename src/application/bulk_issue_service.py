@@ -23,11 +23,11 @@ class BulkIssueFilters:
     min_files_changed: int = 4
     min_lines_changed: int = 50
     max_lines_changed: int = 700
-    min_python_files: int = 1
+    min_python_files: int = 1  # Code files (Python + JS/TS)
     min_python_lines: int = 50
     min_test_files: int = 1
     min_doc_files: int = 0
-    min_total_python_files: int = 4
+    min_total_python_files: int = 4  # Code + test files
     strict_links: bool = False
     require_repo_tests: bool = True
     require_single_merged_pr: bool = True
@@ -315,7 +315,7 @@ class BulkIssueService:
                 owner,
                 repo,
                 issue_number,
-                f"< {filters.min_python_files} Python files",
+                f"< {filters.min_python_files} Code (Py/JS/TS) files",
             )
 
         if py_lines < filters.min_python_lines:
@@ -324,7 +324,7 @@ class BulkIssueService:
                 owner,
                 repo,
                 issue_number,
-                f"< {filters.min_python_lines} Python lines",
+                f"< {filters.min_python_lines} Code (Py/JS/TS) lines",
             )
 
         if file_summary["test"]["count"] < filters.min_test_files:
@@ -342,7 +342,7 @@ class BulkIssueService:
                 owner,
                 repo,
                 issue_number,
-                f"< {filters.min_total_python_files} total Python+test files",
+                f"< {filters.min_total_python_files} total code+test files",
             )
 
         if file_summary["doc"]["count"] < filters.min_doc_files:

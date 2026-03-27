@@ -33,10 +33,15 @@ current_user = require_auth("Dashboard")
 # Initialize database (runs migrations once per process via init guard)
 init_db()
 
-# Load data for main page
-tasks = get_all_tasks()
-issues = get_all_issues()
-repos = get_all_repositories()
+
+@st.cache_data(ttl=60)
+def _load_dashboard_data():
+    """Cached dashboard data to avoid repeated DB hits on reruns."""
+    return get_all_tasks(), get_all_issues(), get_all_repositories()
+
+
+# Load data for main page (cached 60s to reduce slowness)
+tasks, issues, repos = _load_dashboard_data()
 
 def inject_dashboard_theme() -> None:
     st.markdown(

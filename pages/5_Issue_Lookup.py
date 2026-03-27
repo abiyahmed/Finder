@@ -417,8 +417,11 @@ Possible reasons:
                     # Detailed breakdown
                     st.markdown("**File Breakdown:**")
                     bcol1, bcol2, bcol3, bcol4 = st.columns(4)
-                    bcol1.metric("Python", f"{file_summary['python']['count']} files", 
-                                 f"+{file_summary['python']['additions']}/-{file_summary['python']['deletions']}")
+                    bcol1.metric(
+                        "Code (Py/JS/TS)",
+                        f"{file_summary['python']['count']} files",
+                        f"+{file_summary['python']['additions']}/-{file_summary['python']['deletions']}",
+                    )
                     bcol2.metric("Tests", f"{file_summary['test']['count']} files",
                                  f"+{file_summary['test']['additions']}/-{file_summary['test']['deletions']}")
                     bcol3.metric("Docs", f"{file_summary['doc']['count']} files",
@@ -429,7 +432,13 @@ Possible reasons:
                     # Show file list in expander
                     with st.expander(f"View all {len(pr_file_list)} files"):
                         for f in pr_file_list:
-                            cat_emoji = {"python": "Python", "test": "Test", "doc": "Pages", "lock": "Lock", "other": "Files"}.get(f["category"], "Files")
+                            cat_emoji = {
+                                "python": "Code",
+                                "test": "Test",
+                                "doc": "Pages",
+                                "lock": "Lock",
+                                "other": "Files",
+                            }.get(f["category"], "Files")
                             st.text(f"{cat_emoji} {f['filename']} (+{f['additions']}/-{f['deletions']})")
                     
                     if pr_merged_at:

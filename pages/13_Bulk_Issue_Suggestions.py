@@ -111,12 +111,12 @@ with st.expander("Filter Settings", expanded=False):
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         min_files = st.number_input("Min Files", min_value=1, value=4)
-        min_python = st.number_input("Min Python Files", min_value=0, value=1)
-        min_total_py = st.number_input("Min Total Py+Test Files", min_value=0, value=4)
+        min_python = st.number_input("Min Code Files (Py/JS/TS)", min_value=0, value=1)
+        min_total_py = st.number_input("Min Total Code+Test Files", min_value=0, value=4)
     with col2:
         min_lines = st.number_input("Min Lines", min_value=0, value=50)
         max_lines = st.number_input("Max Lines", min_value=50, value=700)
-        min_python_lines = st.number_input("Min Python Lines", min_value=0, value=50)
+        min_python_lines = st.number_input("Min Code Lines", min_value=0, value=50)
     with col3:
         min_test = st.number_input("Min Test Files", min_value=0, value=1)
         min_doc = st.number_input("Min Doc Files", min_value=0, value=0)
@@ -349,7 +349,7 @@ if run_data:
             "Sort Suggestions By",
             [
                 "Quality Score",
-                "Python Lines",
+                "Code Lines (Py/JS/TS)",
                 "Test Files",
                 "Files Changed",
             ],
@@ -359,7 +359,7 @@ if run_data:
         sorted_suggestions = list(suggestions)
         if sort_by == "Quality Score":
             sorted_suggestions.sort(key=lambda row: row.get("quality_score", 0.0), reverse=True)
-        elif sort_by == "Python Lines":
+        elif sort_by == "Code Lines (Py/JS/TS)":
             sorted_suggestions.sort(
                 key=lambda row: row.get("pr_python_additions", 0) + row.get("pr_python_deletions", 0),
                 reverse=True,
@@ -389,9 +389,9 @@ if run_data:
                     "Title": row.get("issue_title", "")[:90],
                     "PR #": row.get("pr_number", ""),
                     "Files": row.get("pr_files_changed", 0),
-                    "Py Files": row.get("pr_python_files", 0),
+                    "Code Files": row.get("pr_python_files", 0),
                     "Test Files": row.get("pr_test_files", 0),
-                    "Py Lines": row.get("pr_python_additions", 0) + row.get("pr_python_deletions", 0),
+                    "Code Lines": row.get("pr_python_additions", 0) + row.get("pr_python_deletions", 0),
                     "Base SHA": _short_sha(row.get("base_sha")),
                     "Base Source": row.get("base_sha_source", ""),
                 }

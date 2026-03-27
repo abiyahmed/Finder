@@ -203,7 +203,7 @@ with tab_issues:
                 else:
                     st.caption(f"PR #{issue.pr_number}")
             with col3:
-                st.caption(f"{issue.pr_python_files or 0} py")
+                st.caption(f"{issue.pr_python_files or 0} code")
             with col4:
                 if st.button("Delete", key=f"del_issue_row_{issue.id}"):
                     delete_issue_by_id(issue.id)

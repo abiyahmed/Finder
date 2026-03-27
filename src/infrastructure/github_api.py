@@ -103,7 +103,19 @@ class GitHubAPI:
     }
     DOC_EXTENSIONS = {".md", ".rst", ".txt", ".adoc", ".rdoc"}
     DOC_DIRS = {"docs", "doc", "documentation", "wiki"}
-    TEST_PATTERNS = {"test_", "_test.py", "tests/", "test/", "testing/", "spec/", "_spec.py"}
+    TEST_PATTERNS = {
+        "test_",
+        "_test.",
+        "tests/",
+        "test/",
+        "testing/",
+        "spec/",
+        "_spec.",
+        "__tests__/",
+        ".test.",
+        ".spec.",
+    }
+    CODE_EXTENSIONS = {".py", ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"}
 
     def __init__(
         self,
@@ -118,12 +130,12 @@ class GitHubAPI:
         request_timeout: float = 30.0,
         strict_links: bool = False,  # If False, ignore URLs inside code blocks
         # Minimum requirements by category (0 = no requirement)
-        min_python_files: int = 1,
-        min_python_lines: int = 50,  # Minimum lines changed in Python files
+        min_python_files: int = 1,  # Code files (Python + JS/TS)
+        min_python_lines: int = 50,  # Minimum lines changed in code files
         min_test_files: int = 0,
         min_doc_files: int = 0,
-        # Combined Python requirement (py + test files total)
-        min_total_python_files: int = 0,  # e.g., 4 = at least 4 py files (including tests)
+        # Combined code requirement (code + test files total)
+        min_total_python_files: int = 0,  # e.g., 4 = at least 4 code files (including tests)
         # Repo-level requirements
         require_repo_tests: bool = False,  # Require repo to have test infrastructure
         # Target mode
@@ -175,6 +187,7 @@ class GitHubAPI:
     def categorize_file(cls, filepath: str) -> str:
         """
         Categorize a file path into: lock, doc, test, python, other.
+        Note: the "python" category includes JS/TS code for cross-language scans.
         """
         filename = filepath.split("/")[-1].lower()
         filepath_lower = filepath.lower()
@@ -190,15 +203,14 @@ class GitHubAPI:
         for doc_dir in cls.DOC_DIRS:
             if f"/{doc_dir}/" in f"/{filepath_lower}/" or filepath_lower.startswith(f"{doc_dir}/"):
                 return "doc"
-        
-        # Python files
-        if filepath_lower.endswith(".py"):
-            # Test files
+
+        # Code files (Python + JS/TS)
+        if ext in cls.CODE_EXTENSIONS:
             for pattern in cls.TEST_PATTERNS:
                 if pattern in filepath_lower:
                     return "test"
             return "python"
-        
+
         return "other"
 
     def fetch_pr_files(self, owner: str, repo: str, pr_number: int) -> list[dict]:
@@ -206,7 +218,6 @@ class GitHubAPI:
         Fetch the list of files changed in a PR with additions/deletions.
         Returns list of {filename, additions, deletions, status, category}.
         """
-        # Use REST API for file list (GraphQL doesn't provide this easily)
         files = []
         page = 1
         while True:
@@ -241,18 +252,18 @@ class GitHubAPI:
             "other": {"count": 0, "additions": 0, "deletions": 0},
             "total_excluding_lock": {"count": 0, "additions": 0, "deletions": 0},
         }
-        
+
         for f in files:
             cat = f.get("category", "other")
             summary[cat]["count"] += 1
             summary[cat]["additions"] += f.get("additions", 0)
             summary[cat]["deletions"] += f.get("deletions", 0)
-            
+
             if cat != "lock":
                 summary["total_excluding_lock"]["count"] += 1
                 summary["total_excluding_lock"]["additions"] += f.get("additions", 0)
                 summary["total_excluding_lock"]["deletions"] += f.get("deletions", 0)
-        
+
         return summary
 
     def _headers(self, token: str = None) -> dict:
@@ -1324,15 +1335,15 @@ class GitHubAPI:
                     reject(f"> {self.max_lines_changed} lines (excl. lock)")
                     continue
             
-            # Check minimum Python files
+            # Check minimum code files (Python + JS/TS)
             if self.min_python_files > 0 and file_summary["python"]["count"] < self.min_python_files:
-                reject(f"< {self.min_python_files} Python files")
+                reject(f"< {self.min_python_files} Code (Py/JS/TS) files")
                 continue
             
-            # Check minimum Python lines (substantial code changes) - skip if relaxed
+            # Check minimum code lines (substantial code changes) - skip if relaxed
             python_lines = file_summary["python"]["additions"] + file_summary["python"]["deletions"]
             if not relaxed_mode and self.min_python_lines > 0 and python_lines < self.min_python_lines:
-                reject(f"< {self.min_python_lines} Python lines ({python_lines} found)")
+                reject(f"< {self.min_python_lines} Code (Py/JS/TS) lines ({python_lines} found)")
                 continue
             
             # Check minimum test files
@@ -1340,10 +1351,13 @@ class GitHubAPI:
                 reject(f"< {self.min_test_files} test files")
                 continue
             
-            # Check combined Python + Test files (hard requirement even in relaxed mode)
+            # Check combined code + test files (hard requirement even in relaxed mode)
             total_py_files = file_summary["python"]["count"] + file_summary["test"]["count"]
             if self.min_total_python_files > 0 and total_py_files < self.min_total_python_files:
-                reject(f"< {self.min_total_python_files} total py files ({total_py_files} found: {file_summary['python']['count']} py + {file_summary['test']['count']} test)")
+                reject(
+                    f"< {self.min_total_python_files} total code+test files "
+                    f"({total_py_files} found: {file_summary['python']['count']} code + {file_summary['test']['count']} test)"
+                )
                 continue
             
             # Check minimum doc files
@@ -1374,9 +1388,9 @@ class GitHubAPI:
             if effective_lines > self.max_lines_changed:
                 pr_fail_reasons.append(f"lines:{effective_lines}>{self.max_lines_changed}")
             if self.min_python_files > 0 and file_summary["python"]["count"] < self.min_python_files:
-                pr_fail_reasons.append(f"py_files:{file_summary['python']['count']}/{self.min_python_files}")
+                pr_fail_reasons.append(f"code_files:{file_summary['python']['count']}/{self.min_python_files}")
             if self.min_python_lines > 0 and python_lines < self.min_python_lines:
-                pr_fail_reasons.append(f"py_lines:{python_lines}/{self.min_python_lines}")
+                pr_fail_reasons.append(f"code_lines:{python_lines}/{self.min_python_lines}")
             
             for issue_ref in linked.get("nodes", []):
                 issue_url = issue_ref.get("url", "")
