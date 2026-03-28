@@ -39,11 +39,16 @@ def _verify_and_parse(value: str) -> int | None:
     return None
 
 
-@st.cache_resource
 def _get_cookie_manager():
+    cache_key = "_rebirth_cookie_manager"
+    if cache_key in st.session_state:
+        return st.session_state[cache_key]
+
     try:
         import extra_streamlit_components as stx
-        return stx.CookieManager()
+        manager = stx.CookieManager(key=cache_key)
+        st.session_state[cache_key] = manager
+        return manager
     except Exception:
         return None
 
