@@ -53,6 +53,7 @@ if "user_id" in st.session_state and st.session_state.get("user_id"):
 if not active_tokens and not effective_token:
     st.warning("No GitHub tokens configured. Go to Admin to add tokens to the pool or Settings to add your personal token.")
     st.page_link("pages/7_Settings.py", label="Configure Token", icon=":material/settings:")
+    st.toast("Missing GitHub token: add one in Settings or Admin.", icon="⚠️")
 
 st.markdown("""
 Scan GitHub repositories for qualifying issues linked to merged PRs.
@@ -71,6 +72,20 @@ finder_service = FinderService(github_api=github_api)
 token_count = max(1, github_api.pool.token_count)
 max_pages_cap = max(50, min(200, token_count * 25))
 target_issues_cap = max(50, min(300, token_count * 40))
+
+with st.expander("Token diagnostics", expanded=False):
+    st.caption(f"Pool tokens: {github_api.pool.token_count}")
+    st.caption(f"Active tokens in DB: {len(active_tokens)}")
+    st.caption(f"Env token present: {'yes' if effective_token else 'no'}")
+    if "user_id" in st.session_state and st.session_state.get("user_id"):
+        st.caption(f"User token present: {'yes' if (user and user.github_token) else 'no'}")
+    limited, rate_msg = github_api.is_rate_limited()
+    if limited:
+        st.warning(rate_msg)
+        st.toast(f"GitHub API limited: {rate_msg}", icon="⛔")
+    else:
+        st.info(rate_msg)
+        st.toast("GitHub API is reachable.", icon="✅")
 
 # Check for bulk scan or single repo
 initial_url = "https://github.com/"
@@ -304,6 +319,7 @@ if run_scan:
                     break
             except Exception as e:
                 st.error(f"Error scanning {url}: {str(e)}")
+                st.toast(f"Scan error: {url}", icon="❌")
                 continue
         
         status.update(label=f"Done - Scanned {len(results_summary)} repos", state="complete")

@@ -7,6 +7,7 @@ import re
 import json
 import time
 import threading
+import logging
 import requests
 from datetime import datetime
 from typing import Optional, Callable, List
@@ -16,6 +17,8 @@ from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 
 class TokenPoolManager:
@@ -268,12 +271,22 @@ class GitHubAPI:
 
     def _headers(self, token: str = None) -> dict:
         t = token or self.pool.get_next_token()
-        return {
-            "Authorization": f"Bearer {t}",
+        headers = {
             "Accept": "application/vnd.github+json",
             "Content-Type": "application/json",
             "User-Agent": "issue-finder-script",
         }
+        if t:
+            headers["Authorization"] = f"Bearer {t}"
+        else:
+            logger.warning("GitHub API request without token; expect strict rate limits and GraphQL failures")
+        return headers
+
+    @staticmethod
+    def _shorten_response_text(text: str, limit: int = 500) -> str:
+        if not text:
+            return ""
+        return text if len(text) <= limit else f"{text[:limit]}..."
 
     def get_rate_limit(self) -> dict:
         """
@@ -337,7 +350,8 @@ class GitHubAPI:
             token = self.pool.get_next_token()
             try:
                 res = requests.get(url, headers=self._headers(token), timeout=self.request_timeout)
-            except requests.exceptions.RequestException:
+            except requests.exceptions.RequestException as exc:
+                logger.warning("GitHub REST request failed: %s (%s)", url, exc)
                 return None
             
             # Update rate limit info
@@ -347,14 +361,23 @@ class GitHubAPI:
                 self.pool.update_limit(token, int(remaining), float(reset))
                 
             if res.status_code != 200:
+                body = self._shorten_response_text(res.text)
+                logger.warning(
+                    "GitHub REST %s failed (%s): %s", url, res.status_code, body
+                )
                 if res.status_code == 403 and "rate limit" in res.text.lower():
                     # If this token is exhausted, try one more time with a different token
                     token = self.pool.get_next_token()
                     try:
                         res = requests.get(url, headers=self._headers(token), timeout=self.request_timeout)
-                    except requests.exceptions.RequestException:
+                    except requests.exceptions.RequestException as exc:
+                        logger.warning("GitHub REST retry failed: %s (%s)", url, exc)
                         return None
                     if res.status_code != 200:
+                        body = self._shorten_response_text(res.text)
+                        logger.warning(
+                            "GitHub REST retry %s failed (%s): %s", url, res.status_code, body
+                        )
                         return None
                 else:
                     return None
@@ -374,6 +397,7 @@ class GitHubAPI:
                     timeout=self.request_timeout,
                 )
             except requests.exceptions.RequestException as e:
+                logger.warning("GitHub GraphQL request failed: %s", e)
                 raise Exception(f"GraphQL request failed: {e}")
             
             # Update rate limit info
@@ -383,9 +407,12 @@ class GitHubAPI:
                 self.pool.update_limit(token, int(remaining), float(reset))
 
             if res.status_code != 200:
-                raise Exception(f"GraphQL query failed with status {res.status_code}: {res.text}")
+                body = self._shorten_response_text(res.text)
+                logger.warning("GitHub GraphQL failed (%s): %s", res.status_code, body)
+                raise Exception(f"GraphQL query failed with status {res.status_code}: {body}")
             data = res.json()
             if "errors" in data:
+                logger.warning("GitHub GraphQL returned errors: %s", data["errors"])
                 raise Exception(f"GraphQL query error: {data['errors']}")
             return data["data"]
 

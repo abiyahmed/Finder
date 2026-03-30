@@ -2948,7 +2948,8 @@ def update_user_token(
     try:
         user = session.query(User).filter_by(id=user_id).first()
         if user:
-            user.github_token = github_token
+            cleaned = (github_token or "").strip()
+            user.github_token = cleaned or None
 
             actor = actor_user_id or user_id
             if actor:
@@ -2957,7 +2958,7 @@ def update_user_token(
                     user_id=actor,
                     action="user_token_updated",
                     feature="Settings",
-                    metadata={"target_user_id": user_id, "has_token": bool(github_token)},
+                    metadata={"target_user_id": user_id, "has_token": bool(cleaned)},
                     access_context=access_context,
                 )
 

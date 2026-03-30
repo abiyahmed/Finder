@@ -106,24 +106,20 @@ if current_token:
             
             with col_rest:
                 st.markdown("**REST API**")
-                rest = rate_info.get("rest", {})
-                used = rest.get("used", 0)
-                limit = rest.get("limit", 5000)
-                remaining = rest.get("remaining", 0)
-                reset = rest.get("reset_time", "")
-                
+                limit = rate_info.get("core_limit", 0)
+                remaining = rate_info.get("core_remaining", 0)
+                reset = rate_info.get("core_reset", "")
+                used = max(0, limit - remaining) if limit else 0
                 st.progress(used / limit if limit else 0)
                 st.caption(f"{remaining}/{limit} remaining")
                 st.caption(f"Resets: {reset}")
             
             with col_gql:
                 st.markdown("**GraphQL API**")
-                gql = rate_info.get("graphql", {})
-                used = gql.get("used", 0)
-                limit = gql.get("limit", 5000)
-                remaining = gql.get("remaining", 0)
-                reset = gql.get("reset_time", "")
-                
+                limit = rate_info.get("graphql_limit", 0)
+                remaining = rate_info.get("graphql_remaining", 0)
+                reset = rate_info.get("graphql_reset", "")
+                used = max(0, limit - remaining) if limit else 0
                 st.progress(used / limit if limit else 0)
                 st.caption(f"{remaining}/{limit} remaining")
                 st.caption(f"Resets: {reset}")

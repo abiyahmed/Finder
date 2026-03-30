@@ -44,22 +44,38 @@ st.markdown("Find GitHub repositories that match your criteria.")
 # TOKEN CONFIG
 # =========================
 
-active_tokens = [t.token for t in get_all_github_tokens(only_active=True)]
-effective_token = os.getenv("GITHUB_TOKEN", "")
+active_tokens = [t.token.strip() for t in get_all_github_tokens(only_active=True) if t.token and str(t.token).strip()]
+effective_token = (os.getenv("GITHUB_TOKEN", "") or "").strip()
 if user and user.github_token:
-    if user.github_token not in active_tokens:
-        active_tokens.append(user.github_token)
-    effective_token = user.github_token
+    cleaned_user_token = user.github_token.strip()
+    if cleaned_user_token and cleaned_user_token not in active_tokens:
+        active_tokens.append(cleaned_user_token)
+    if cleaned_user_token:
+        effective_token = cleaned_user_token
 
 api_tokens = active_tokens if active_tokens else ([effective_token] if effective_token else None)
 if not api_tokens:
     st.warning("No GitHub token configured. Go to Settings to add one.")
     st.page_link("pages/7_Settings.py", label="Configure Token", icon=":material/settings:")
+    st.toast("Missing GitHub token: add one in Settings or Admin.", icon="⚠️")
     st.stop()
 
 api = GitHubAPI(tokens=api_tokens)
 token_count = max(1, api.pool.token_count)
 max_results_cap = max(100, min(200, token_count * 50))
+
+with st.expander("Token diagnostics", expanded=False):
+    st.caption(f"Pool tokens: {api.pool.token_count}")
+    st.caption(f"Active tokens in DB: {len(active_tokens)}")
+    st.caption(f"Env token present: {'yes' if effective_token else 'no'}")
+    st.caption(f"User token present: {'yes' if (user and user.github_token) else 'no'}")
+    limited, rate_msg = api.is_rate_limited()
+    if limited:
+        st.warning(rate_msg)
+        st.toast(f"GitHub API limited: {rate_msg}", icon="⛔")
+    else:
+        st.info(rate_msg)
+        st.toast("GitHub API is reachable.", icon="✅")
 
 # =========================
 # SEARCH FILTERS
@@ -192,6 +208,7 @@ if st.button("Search Repositories", type="primary", width="stretch"):
 
         if repos:
             st.success(f"GitHub has {total_count:,} matching repos - evaluating top {len(repos)} by {sort_by}")
+            st.toast("Repo search started.", icon="🔎")
 
             qualifying_repos = []
             skipped_blacklisted = 0
@@ -348,6 +365,7 @@ if st.button("Search Repositories", type="primary", width="stretch"):
                 st.warning("No repos matched the criteria. Try lowering thresholds.")
         else:
             st.error("Search failed or no results")
+            st.toast("Repo search failed.", icon="❌")
 
 # =========================
 # DISPLAY RESULTS
