@@ -22,7 +22,7 @@ from src.ui.activity_tracker import get_request_access_context, track_logout
 init_db()
 
 st.set_page_config(page_title="Settings", page_icon=":material/settings:", layout="wide")
-from src.ui.sidebar import quick_hide, render_sidebar, require_auth
+from src.ui.sidebar import quick_hide, render_sidebar, require_auth, AUTH_DISABLED
 quick_hide()
 render_sidebar()
 user = require_auth("Settings")
@@ -158,9 +158,12 @@ else:
 
 st.markdown("---")
 
-if st.button("Logout", type="secondary"):
-    track_logout(user.id)
-    del st.session_state["user_id"]
-    del st.session_state["username"]
-    st.success("Logged out")
-    st.rerun()
+if not AUTH_DISABLED:
+    if st.button("Logout", type="secondary"):
+        track_logout(user.id)
+        del st.session_state["user_id"]
+        del st.session_state["username"]
+        st.success("Logged out")
+        st.rerun()
+else:
+    st.caption("Logout is disabled while authentication is off.")

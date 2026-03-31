@@ -8,11 +8,15 @@ from src.infrastructure.database import (
     get_all_issues,
     get_all_tasks,
     get_available_good_issues,
+    get_or_create_auth_bypass_user,
     get_pending_labeling_submissions,
     get_pending_task_key_requests,
     get_user_by_id,
     get_user_by_supabase_uid,
 )
+
+# Set False to restore login, signup, verification, and session cookies.
+AUTH_DISABLED = True
 from src.ui.activity_tracker import touch_authenticated_user, track_logout
 from src.ui.session_cookie import (
     get_session_from_cookie,
@@ -137,6 +141,20 @@ def require_auth(feature_name: str = None):
     """
     apply_app_theme()
 
+    if AUTH_DISABLED:
+        try:
+            user = get_or_create_auth_bypass_user()
+        except Exception:
+            st.error("Database temporarily unavailable. Please try again in a moment.")
+            st.stop()
+        st.session_state["user_id"] = user.id
+        st.session_state["username"] = user.username
+        try:
+            touch_authenticated_user(user.id, feature=feature_name)
+        except Exception:
+            pass
+        return user
+
     if "user_id" not in st.session_state or not st.session_state.get("user_id"):
         # Try recovering from session cookie (survives page refresh)
         cookie_user_id = get_session_from_cookie()
@@ -242,7 +260,23 @@ def render_sidebar():
     hide_default_sidebar()
 
     with st.sidebar:
-        if "user_id" in st.session_state and st.session_state.get("user_id"):
+        if AUTH_DISABLED:
+            try:
+                user = get_or_create_auth_bypass_user()
+                st.session_state["user_id"] = user.id
+                st.session_state["username"] = user.username
+            except Exception:
+                user = None
+            if user:
+                st.markdown(f"**{user.username}** — local (auth off)")
+                if user.is_admin:
+                    st.page_link(
+                        "pages/0_Admin.py",
+                        label="Admin Panel",
+                        icon=":material/admin_panel_settings:",
+                    )
+                st.page_link("pages/7_Settings.py", label="Settings", icon=":material/settings:")
+        elif "user_id" in st.session_state and st.session_state.get("user_id"):
             try:
                 user = get_user_by_id(st.session_state["user_id"])
             except Exception:

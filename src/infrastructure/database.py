@@ -2937,6 +2937,35 @@ def get_user_by_username(username: str) -> Optional[User]:
         session.close()
 
 
+AUTH_BYPASS_USERNAME = "__finder_local__"
+
+
+def get_or_create_auth_bypass_user() -> User:
+    """
+    Single local user used when app authentication is disabled (no login/signup).
+    Verified + admin so all pages including Admin are usable without credentials.
+    """
+    session = get_session()
+    try:
+        user = session.query(User).filter_by(username=AUTH_BYPASS_USERNAME).first()
+        if user:
+            return user
+        user = User(
+            username=AUTH_BYPASS_USERNAME,
+            password_hash="auth_disabled",
+            email=None,
+            is_admin=1,
+            is_verified=1,
+            role="admin",
+        )
+        session.add(user)
+        session.commit()
+        session.refresh(user)
+        return user
+    finally:
+        session.close()
+
+
 def update_user_token(
     user_id: int,
     github_token: str,
