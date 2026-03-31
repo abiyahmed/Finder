@@ -1,8 +1,6 @@
 """
 Shared sidebar navigation component.
 """
-import os
-
 import streamlit as st
 
 from src.infrastructure.database import (
@@ -14,19 +12,9 @@ from src.infrastructure.database import (
     get_pending_labeling_submissions,
     get_pending_task_key_requests,
     get_user_by_id,
-    get_user_by_supabase_uid,
     init_db,
 )
-from src.ui.activity_tracker import touch_authenticated_user, track_logout
-from src.ui.session_cookie import (
-    get_session_from_cookie,
-    set_session_cookie,
-    delete_session_cookie,
-)
-
-# Default: auth off (no login). Set env FINDER_AUTH_DISABLED=0 or false to enable Supabase/local login.
-_AUTH_FLAG = os.environ.get("FINDER_AUTH_DISABLED", "1").strip().lower()
-AUTH_DISABLED = _AUTH_FLAG not in ("0", "false", "no", "off")
+from src.ui.activity_tracker import touch_authenticated_user
 
 # CSS to hide default nav - injected as early as possible.
 HIDE_NAV_CSS = '<style>[data-testid="stSidebarNav"]{display:none!important;}</style>'
@@ -125,117 +113,23 @@ def quick_hide():
     st.markdown(HIDE_NAV_CSS, unsafe_allow_html=True)
 
 
-def _hide_sidebar_css():
-    st.markdown(
-        """
-        <style>
-            [data-testid="stSidebar"] { display: none !important; }
-            [data-testid="collapsedControl"] { display: none !important; }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-
 def require_auth(feature_name: str = None):
     """
-    Check if user is logged in AND verified.
-    Stops execution and redirects to login if not.
-    Returns the user object if authenticated.
+    Resolve the workspace user (single local account, no login UI).
     """
     apply_app_theme()
-
-    if AUTH_DISABLED:
-        init_db()
-        try:
-            user = get_or_create_auth_bypass_user()
-        except Exception:
-            st.error("Database temporarily unavailable. Please try again in a moment.")
-            st.stop()
-        st.session_state["user_id"] = user.id
-        st.session_state["username"] = user.username
-        try:
-            touch_authenticated_user(user.id, feature=feature_name)
-        except Exception:
-            pass
-        return user
-
-    if "user_id" not in st.session_state or not st.session_state.get("user_id"):
-        # Try recovering from session cookie (survives page refresh)
-        cookie_user_id = get_session_from_cookie()
-        if cookie_user_id:
-            try:
-                local_user = get_user_by_id(cookie_user_id)
-                if local_user:
-                    st.session_state["user_id"] = local_user.id
-                    st.session_state["username"] = local_user.username
-            except Exception:
-                pass
-        # Else try Supabase token if present
-        if ("user_id" not in st.session_state or not st.session_state.get("user_id")):
-            token = st.session_state.get("supabase_access_token")
-            if token:
-                try:
-                    from src.infrastructure.supabase_client import supabase_get_user
-                    sb_user = supabase_get_user(token)
-                    if sb_user:
-                        local_user = get_user_by_supabase_uid(sb_user["id"])
-                        if local_user:
-                            st.session_state["user_id"] = local_user.id
-                            st.session_state["username"] = local_user.username
-                except Exception:
-                    pass
-
-    if "user_id" not in st.session_state or not st.session_state.get("user_id"):
-        _hide_sidebar_css()
-        st.warning("Please login to continue.")
-        st.page_link("pages/_Auth.py", label="Login / Sign Up", icon=":material/lock:")
-        st.stop()
-
+    init_db()
     try:
-        user = get_user_by_id(st.session_state["user_id"])
+        user = get_or_create_auth_bypass_user()
     except Exception:
-        _hide_sidebar_css()
         st.error("Database temporarily unavailable. Please try again in a moment.")
-        if st.button("Retry"):
-            st.rerun()
         st.stop()
-
-    if not user:
-        _hide_sidebar_css()
-        st.error("Session expired. Please login again.")
-        delete_session_cookie()
-        if "user_id" in st.session_state:
-            del st.session_state["user_id"]
-        st.page_link("pages/_Auth.py", label="Login", icon=":material/lock:")
-        st.stop()
-
-    # rebumex, admin, and managers skip verification
-    _privileged = (
-        user.username == "rebumex"
-        or getattr(user, "is_admin", 0)
-        or getattr(user, "role", None) in ("admin", "role_manager")
-    )
-    if not _privileged and not user.is_verified:
-        _hide_sidebar_css()
-        st.warning("Your account is pending verification by an admin.")
-        st.info("Please wait for approval. You will be able to access the app once verified.")
-        if st.button("Logout"):
-            track_logout(user.id)
-            delete_session_cookie()
-            del st.session_state["user_id"]
-            st.rerun()
-        st.stop()
-
+    st.session_state["user_id"] = user.id
+    st.session_state["username"] = user.username
     try:
         touch_authenticated_user(user.id, feature=feature_name)
     except Exception:
-        # Access telemetry must not block normal app usage.
         pass
-
-    # Keep session cookie set so refresh keeps user logged in
-    set_session_cookie(user.id)
-
     return user
 
 
@@ -265,52 +159,22 @@ def render_sidebar():
     hide_default_sidebar()
 
     with st.sidebar:
-        if AUTH_DISABLED:
-            init_db()
-            try:
-                user = get_or_create_auth_bypass_user()
-                st.session_state["user_id"] = user.id
-                st.session_state["username"] = user.username
-            except Exception:
-                user = None
-            if user:
-                st.markdown(f"**{user.username}** — local (auth off)")
-                if user.is_admin:
-                    st.page_link(
-                        "pages/0_Admin.py",
-                        label="Admin Panel",
-                        icon=":material/admin_panel_settings:",
-                    )
-                st.page_link("pages/7_Settings.py", label="Settings", icon=":material/settings:")
-        elif "user_id" in st.session_state and st.session_state.get("user_id"):
-            try:
-                user = get_user_by_id(st.session_state["user_id"])
-            except Exception:
-                user = None
-            if user:
-                status_text = "Verified" if user.is_verified else "Pending"
-                role_badge = ""
-                if user.is_admin or user.role == "admin":
-                    role_badge = " [Admin]"
-                elif user.role == "role_manager":
-                    role_badge = " [Manager]"
-                st.markdown(f"**{user.username}** - {status_text}{role_badge}")
-
-                if user.is_admin:
-                    st.page_link(
-                        "pages/0_Admin.py",
-                        label="Admin Panel",
-                        icon=":material/admin_panel_settings:",
-                    )
-
-                st.page_link("pages/7_Settings.py", label="Settings", icon=":material/settings:")
-
-                if not user.is_verified:
-                    st.warning("Pending verification")
-            else:
-                st.page_link("pages/_Auth.py", label="Login", icon=":material/lock:")
-        else:
-            st.page_link("pages/_Auth.py", label="Login / Sign Up", icon=":material/lock:")
+        init_db()
+        try:
+            user = get_or_create_auth_bypass_user()
+            st.session_state["user_id"] = user.id
+            st.session_state["username"] = user.username
+        except Exception:
+            user = None
+        if user:
+            st.markdown(f"**{user.username}** — local user")
+            if user.is_admin:
+                st.page_link(
+                    "pages/0_Admin.py",
+                    label="Admin Panel",
+                    icon=":material/admin_panel_settings:",
+                )
+            st.page_link("pages/7_Settings.py", label="Settings", icon=":material/settings:")
 
         st.markdown("---")
         st.title("Navigation")

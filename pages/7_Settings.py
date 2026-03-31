@@ -17,12 +17,12 @@ from src.infrastructure.database import (
     get_all_good_issues,
 )
 from src.infrastructure.github_api import GitHubAPI
-from src.ui.activity_tracker import get_request_access_context, track_logout
+from src.ui.activity_tracker import get_request_access_context
 
 init_db()
 
 st.set_page_config(page_title="Settings", page_icon=":material/settings:", layout="wide")
-from src.ui.sidebar import quick_hide, render_sidebar, require_auth, AUTH_DISABLED
+from src.ui.sidebar import quick_hide, render_sidebar, require_auth
 quick_hide()
 render_sidebar()
 user = require_auth("Settings")
@@ -152,18 +152,3 @@ else:
     st.info("No reserved issues. Browse Good Issues to reserve one!")
     st.page_link("pages/9_Good_Issues.py", label="Browse Good Issues", icon=":material/thumb_up:")
 
-# =========================
-# LOGOUT
-# =========================
-
-st.markdown("---")
-
-if not AUTH_DISABLED:
-    if st.button("Logout", type="secondary"):
-        track_logout(user.id)
-        del st.session_state["user_id"]
-        del st.session_state["username"]
-        st.success("Logged out")
-        st.rerun()
-else:
-    st.caption("Logout is disabled while authentication is off.")
