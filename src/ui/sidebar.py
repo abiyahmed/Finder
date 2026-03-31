@@ -1,6 +1,8 @@
 """
 Shared sidebar navigation component.
 """
+import os
+
 import streamlit as st
 
 from src.infrastructure.database import (
@@ -13,16 +15,18 @@ from src.infrastructure.database import (
     get_pending_task_key_requests,
     get_user_by_id,
     get_user_by_supabase_uid,
+    init_db,
 )
-
-# Set False to restore login, signup, verification, and session cookies.
-AUTH_DISABLED = True
 from src.ui.activity_tracker import touch_authenticated_user, track_logout
 from src.ui.session_cookie import (
     get_session_from_cookie,
     set_session_cookie,
     delete_session_cookie,
 )
+
+# Default: auth off (no login). Set env FINDER_AUTH_DISABLED=0 or false to enable Supabase/local login.
+_AUTH_FLAG = os.environ.get("FINDER_AUTH_DISABLED", "1").strip().lower()
+AUTH_DISABLED = _AUTH_FLAG not in ("0", "false", "no", "off")
 
 # CSS to hide default nav - injected as early as possible.
 HIDE_NAV_CSS = '<style>[data-testid="stSidebarNav"]{display:none!important;}</style>'
@@ -142,6 +146,7 @@ def require_auth(feature_name: str = None):
     apply_app_theme()
 
     if AUTH_DISABLED:
+        init_db()
         try:
             user = get_or_create_auth_bypass_user()
         except Exception:
@@ -184,7 +189,7 @@ def require_auth(feature_name: str = None):
     if "user_id" not in st.session_state or not st.session_state.get("user_id"):
         _hide_sidebar_css()
         st.warning("Please login to continue.")
-        st.page_link("pages/8_Auth.py", label="Login / Sign Up", icon=":material/lock:")
+        st.page_link("pages/_Auth.py", label="Login / Sign Up", icon=":material/lock:")
         st.stop()
 
     try:
@@ -202,7 +207,7 @@ def require_auth(feature_name: str = None):
         delete_session_cookie()
         if "user_id" in st.session_state:
             del st.session_state["user_id"]
-        st.page_link("pages/8_Auth.py", label="Login", icon=":material/lock:")
+        st.page_link("pages/_Auth.py", label="Login", icon=":material/lock:")
         st.stop()
 
     # rebumex, admin, and managers skip verification
@@ -261,6 +266,7 @@ def render_sidebar():
 
     with st.sidebar:
         if AUTH_DISABLED:
+            init_db()
             try:
                 user = get_or_create_auth_bypass_user()
                 st.session_state["user_id"] = user.id
@@ -302,9 +308,9 @@ def render_sidebar():
                 if not user.is_verified:
                     st.warning("Pending verification")
             else:
-                st.page_link("pages/8_Auth.py", label="Login", icon=":material/lock:")
+                st.page_link("pages/_Auth.py", label="Login", icon=":material/lock:")
         else:
-            st.page_link("pages/8_Auth.py", label="Login / Sign Up", icon=":material/lock:")
+            st.page_link("pages/_Auth.py", label="Login / Sign Up", icon=":material/lock:")
 
         st.markdown("---")
         st.title("Navigation")
