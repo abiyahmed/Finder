@@ -1,5 +1,6 @@
 """
-Auth disabled: login and signup are not used. See src.ui.sidebar.AUTH_DISABLED.
+Auth stub. Leading underscore hides this file from Streamlit's auto page nav.
+When FINDER_AUTH_DISABLED=0, use Login / Sign Up from the custom sidebar.
 """
 import sys
 from pathlib import Path

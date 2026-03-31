@@ -26,12 +26,11 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+# Must run before require_auth so auth-bypass user can be created on first launch.
+init_db()
 quick_hide()
 render_sidebar()
 current_user = require_auth("Dashboard")
-
-# Initialize database (runs migrations once per process via init guard)
-init_db()
 
 
 @st.cache_data(ttl=60)

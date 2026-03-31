@@ -311,4 +311,4 @@ with tab_my:
             st.info("You have not reserved any issues.")
     else:
         st.warning("Login to see your issues")
-        st.page_link("pages/8_Auth.py", label="Login", icon=":material/lock:")
+        st.page_link("pages/_Auth.py", label="Login", icon=":material/lock:")
