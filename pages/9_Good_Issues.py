@@ -310,5 +310,5 @@ with tab_my:
         else:
             st.info("You have not reserved any issues.")
     else:
-        st.warning("Login to see your issues")
-        st.page_link("pages/_Auth.py", label="Login", icon=":material/lock:")
+        st.warning("Could not load your user profile.")
+        st.page_link("run.py", label="Home", icon=":material/home:")
